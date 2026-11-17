@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="96" align="right">
+
 # Teleink
 
 Unofficial Telegram client for PocketBook e-readers (firmware 6.x).

@@ -39,8 +39,9 @@ L="$PREFIX/lib"
 # release zip: copy its contents to the root of the reader's memory
 PKG="$OUT/pkg"
 rm -rf "$PKG"
-mkdir -p "$PKG/applications"
+mkdir -p "$PKG/applications/icons"
 cp "$OUT/$APP_NAME.app" "$PKG/applications/"
+cp "$ROOT/packaging/icons/"*.bmp "$PKG/applications/icons/"
 cp "$ROOT/packaging/README.txt" "$PKG/README.txt"
 # the key template is only useful when the build has no keys of its own
 [ ${#DEFS[@]} -eq 0 ] && cp "$ROOT/packaging/teleink-api.txt" "$PKG/teleink-api.txt"

@@ -7,6 +7,7 @@
 #include <list>
 #include <memory>
 
+#include "logo.h"
 #include "tg.h"
 #include "util.h"
 
@@ -563,11 +564,34 @@ static void centeredBlock(int &y, ifont *f, int color, const std::string &t) {
   y += h + FS;
 }
 
+// The paper-plane logo, scaled once to the requested width.
+static void drawLogo(int &y, int size) {
+  static ibitmap *scaled = nullptr;
+  static int scaledSize = 0;
+  if (!scaled || scaledSize != size) {
+    auto *src = static_cast<ibitmap *>(malloc(sizeof(ibitmap) + LOGO_W * LOGO_H));
+    if (!src) return;
+    src->width = LOGO_W;
+    src->height = LOGO_H;
+    src->depth = 8;
+    src->scanline = LOGO_W;
+    memcpy(src->data, LOGO_DATA, LOGO_W * LOGO_H);
+    if (scaled) free(scaled);
+    scaled = BitmapStretchProportionally(src, size, size);
+    if (scaled) free(src);
+    else scaled = src;
+    scaledSize = size;
+  }
+  DrawBitmap((W - scaled->width) / 2, y, scaled);
+  y += scaled->height + FS / 2;
+}
+
 // First run: pick the interface language.
 static void drawLanguagePicker() {
   ClearScreen();
   hits.clear();
-  int y = H / 4;
+  int y = H / 6;
+  drawLogo(y, W / 4);
   centeredBlock(y, fHuge, BLACK, APP_NAME);
   y += FS * 2;
   int bw = W - 4 * FS, bh = FS * 2 + FS / 2, x = 2 * FS;
@@ -635,7 +659,8 @@ static void drawLogin() {
   }
   if (tg.lastError.find("api_") != std::string::npos) primary = "api_id · api_hash";
 
-  int y = H / 5;
+  int y = H / 8;
+  drawLogo(y, W / 4);
   centeredBlock(y, fHuge, BLACK, APP_NAME);
   y += FS;
   centeredBlock(y, fBold, BLACK, title);
