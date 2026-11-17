@@ -138,6 +138,11 @@ int main(int argc, char **argv) {
   tg.listComplete["main"] = true;
   scr = Scr::Chats;
   shot("04_chats");
+  searchMode = true;
+  searchQuery = "клуб";
+  searchResults = {101};
+  shot("04b_search");
+  searchMode = false;
   listPage = 1;
   shot("05_chats_page2");
   listPage = 0;

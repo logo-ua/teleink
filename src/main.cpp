@@ -182,7 +182,7 @@ struct Hit {
 };
 enum {
   H_BACK = 1, H_MENU, H_PREV, H_NEXT, H_CHAT, H_MSG, H_FILE, H_INPUT, H_REPLY_CANCEL,
-  H_LOGIN1, H_PICK, H_ATTACH, H_SPONSORED, H_LANG
+  H_LOGIN1, H_PICK, H_ATTACH, H_SPONSORED, H_LANG, H_SEARCH
 };
 static std::vector<Hit> hits;
 
@@ -278,11 +278,10 @@ static void ticks(int x, int y, bool two, int color) {
 // Thin scroll indicator on the right edge: start and size are fractions of the whole.
 static void scrollbar(int y, int h, double start, double size) {
   if (size >= 1.0 || h <= 0) return;
-  int w = std::max(4, FS / 6), x = W - w - 2;
-  FillArea(x + w / 2 - 1, y, 2, h, LGRAY);
-  int th = std::max(FS, static_cast<int>(h * size));
+  int w = 3, x = W - w - 3;
+  int th = std::max(FS * 3 / 2, static_cast<int>(h * size));
   int ty = y + static_cast<int>((h - th) * std::min(1.0, std::max(0.0, start / std::max(1e-9, 1.0 - size))));
-  fillRound(x, ty, w, th, w / 2, DGRAY);
+  fillRound(x, ty, w, th, 1, DGRAY);
 }
 
 static void button(int x, int y, int w, int h, const std::string &label, bool primary) {
@@ -301,7 +300,8 @@ static int headerH() { return FS * 2 + FS / 3; }
 static int footerH() { return FS * 2; }
 
 // Header with optional back button on the left and an action on the right.
-static void drawHeader(const std::string &title, bool back, const std::string &right, int rightKind = H_MENU) {
+static void drawHeader(const std::string &title, bool back, const std::string &right, int rightKind = H_MENU,
+                       bool searchIcon = false) {
   int hh = headerH();
   FillArea(0, 0, W, hh, WHITE);
   int x = FS / 2;
@@ -317,6 +317,16 @@ static void drawHeader(const std::string &title, bool back, const std::string &r
     int bw = FS, bx = W - FS / 2 - bw - FS / 4, th = std::max(2, FS / 9);
     for (int i = -1; i <= 1; i++) FillArea(bx, hh / 2 + i * FS / 3 - th / 2, bw, th, BLACK);
     addHit(W - rw - FS / 2, 0, rw + FS / 2, hh, rightKind);
+    if (searchIcon) {
+      // magnifier: ring plus handle
+      int d = FS * 3 / 4, t = std::max(2, FS / 9);
+      int cx = W - rw - FS / 2 - FS, cy = hh / 2 - FS / 8;
+      fillRound(cx - d / 2, cy - d / 2, d, d, d / 2, BLACK);
+      fillRound(cx - d / 2 + t, cy - d / 2 + t, d - 2 * t, d - 2 * t, d / 2 - t, WHITE);
+      thickLine(cx + d * 3 / 10, cy + d * 3 / 10, cx + d * 3 / 5, cy + d * 3 / 5, t, BLACK);
+      addHit(cx - FS, 0, FS * 2, hh, H_SEARCH);
+      rw += FS * 2;
+    }
   } else if (!right.empty()) {
     rw = textW(fBig, right) + FS;
     text(fBig, BLACK, W - rw, 0, rw - FS / 2, hh, right, ALIGN_RIGHT | VALIGN_MIDDLE);
@@ -800,7 +810,61 @@ static void chooseLanguage(int l) {
 static int rowH() { return lineH(fBold) + lineH(fSmall) + FS * 2 / 3 + FS / 3; }
 static int rowsPerPage() { return std::max(1, (H - headerH() - footerH()) / rowH()); }
 
-static std::vector<int64_t> currentChatIds() { return tg.chatIds("main"); }
+static bool searchMode = false;
+static std::string searchQuery;
+static std::vector<int64_t> searchResults;
+
+static std::vector<int64_t> currentChatIds() { return searchMode ? searchResults : tg.chatIds("main"); }
+
+static void addResult(int64_t id, bool front) {
+  if (std::find(searchResults.begin(), searchResults.end(), id) != searchResults.end()) return;
+  if (front) searchResults.insert(searchResults.begin(), id);
+  else searchResults.push_back(id);
+}
+
+static void onSearch(char *t) {
+  modalOpen = false;
+  std::string q = t ? util::trim(t) : "";
+  if (q.empty()) { invalidate(true); return; }
+  searchQuery = q;
+  searchMode = true;
+  searchResults.clear();
+  listPage = 0;
+  auto chats = [](object_ptr<td_api::Object> o) {
+    if (o->get_id() == td_api::chats::ID)
+      for (auto id : static_cast<td_api::chats &>(*o).chat_ids_) addResult(id, false);
+    invalidate();
+  };
+  if (q[0] == '@') {
+    tg.send(make_object<td_api::searchPublicChat>(q.substr(1)), [](object_ptr<td_api::Object> o) {
+      if (o->get_id() == td_api::chat::ID) addResult(static_cast<td_api::chat &>(*o).id_, true);
+      invalidate();
+    });
+  } else {
+    auto local = make_object<td_api::searchChats>();
+    local->query_ = q;
+    local->limit_ = 50;
+    tg.send(std::move(local), chats);
+    auto server = make_object<td_api::searchChatsOnServer>();
+    server->query_ = q;
+    server->limit_ = 50;
+    tg.send(std::move(server), chats);
+  }
+  invalidate(true);
+}
+
+static void startSearch() {
+  snprintf(kbuf, sizeof kbuf, "%s", searchMode ? searchQuery.c_str() : "");
+  modalOpen = true;
+  OpenKeyboard(tr(S_SEARCH), kbuf, 128, KBD_NORMAL, onSearch);
+}
+
+static void endSearch() {
+  searchMode = false;
+  searchResults.clear();
+  listPage = 0;
+  invalidate(true);
+}
 
 static void drawChatRow(const td_api::chat &c, int y) {
   int pad = FS / 2, rh = rowH();
@@ -851,7 +915,7 @@ static void drawChats() {
   auto ids = currentChatIds();
   int per = rowsPerPage();
   int pages = std::max(1, static_cast<int>((ids.size() + per - 1) / per));
-  if (!tg.listComplete["main"]) pages = std::max(pages, listPage + 2);
+  if (!searchMode && !tg.listComplete["main"]) pages = std::max(pages, listPage + 2);
   if (listPage >= pages) listPage = pages - 1;
   int y = headerH();
   size_t start = static_cast<size_t>(listPage) * per;
@@ -862,16 +926,16 @@ static void drawChats() {
     y += rowH();
   }
   if (ids.empty()) {
-    std::string msg = tg.listComplete["main"] ? tr(S_NOTHING) : "…";
+    std::string msg = (searchMode || tg.listComplete["main"]) ? tr(S_NOTHING) : "…";
     text(fReg, DGRAY, 0, H / 3, W, FS * 3, msg, ALIGN_CENTER | VALIGN_MIDDLE);
   }
   // load more when the user reaches the end of what is known
-  if (start + per * 2 >= ids.size()) tg.loadChats("main", 60);
+  if (!searchMode && start + per * 2 >= ids.size()) tg.loadChats("main", 60);
   if (!ids.empty()) {
     double total = std::max(ids.size(), start + per);
     scrollbar(headerH() + FS / 4, H - headerH() - footerH() - FS / 2, start / total, per / total);
   }
-  drawHeader(tr(S_CHATS), false, MENU_ICON);
+  drawHeader(searchMode ? searchQuery : std::string(tr(S_CHATS)), searchMode, MENU_ICON, H_MENU, true);
   drawPager(listPage, pages);
 }
 
@@ -1767,6 +1831,8 @@ static void handleTap(int x, int y) {
       else if (h.kind == H_MENU) chatsMenu();
       else if (h.kind == H_PREV) { listPage = std::max(0, listPage - 1); invalidate(); }
       else if (h.kind == H_NEXT) { listPage++; invalidate(); }
+      else if (h.kind == H_SEARCH) startSearch();
+      else if (h.kind == H_BACK) endSearch();
       break;
     case Scr::Chat:
       if (h.kind == H_BACK) closeChatScreen();
@@ -1826,6 +1892,7 @@ static void goBack() {
     case Scr::Chat: closeChatScreen(); break;
     case Scr::Files: setScreen(Scr::Chat); break;
     case Scr::Chats:
+      if (searchMode) endSearch();
       break;
     default: break;
   }
