@@ -858,7 +858,16 @@ static bool searchMode = false;
 static std::string searchQuery;
 static std::vector<int64_t> searchResults;
 
-static std::vector<int64_t> currentChatIds() { return searchMode ? searchResults : tg.chatIds("main"); }
+static std::string listKey = "main";  // "main" or "archive"
+static const int64_t ARCHIVE_ROW = 0;   // pseudo chat id of the "Archive" row at the top of the main list
+
+static std::vector<int64_t> currentChatIds() {
+  if (searchMode) return searchResults;
+  auto ids = tg.chatIds(listKey);
+  // like the phone and desktop apps: archived chats sit behind one row at the top
+  if (listKey == "main" && !tg.chatIds("archive").empty()) ids.insert(ids.begin(), ARCHIVE_ROW);
+  return ids;
+}
 
 static void addResult(int64_t id, bool front) {
   if (std::find(searchResults.begin(), searchResults.end(), id) != searchResults.end()) return;
@@ -1029,33 +1038,85 @@ static void drawChatRow(const td_api::chat &c, int y) {
   addHit(0, y, W, rh, H_CHAT, c.id_);
 }
 
+// Row that opens the archive: box icon, names of archived chats, unread total.
+static void drawArchiveRow(int y) {
+  int pad = FS / 2, rh = rowH(), ad = avatarSize();
+  int ax = pad, ay = y + (rh - ad) / 2;
+  fillRound(ax, ay, ad, ad, ad / 2, LGRAY);
+  // box: lid and body
+  int bw = ad / 2, bh = ad / 3, bx = ax + (ad - bw) / 2, by = ay + ad / 2 - bh / 3;
+  int t = std::max(2, FS / 12);
+  fillRound(bx - t, by - bh / 3 - t, bw + 2 * t, bh / 3, 2, BLACK);
+  roundBox(bx, by, bw, bh, LGRAY, BLACK, t);
+  FillArea(bx + bw / 3, by + bh / 3, bw / 3, t, BLACK);
+
+  int x = pad + ad + pad, w = W - x - rightPad();
+  int y1 = y + FS / 3;
+  line1(fBold, BLACK, x, y1, w, tr(S_ARCHIVE));
+  auto ids = tg.chatIds("archive");
+  std::string names;
+  int unread = 0;
+  for (size_t i = 0; i < ids.size(); i++) {
+    auto c = tg.chat(ids[i]);
+    if (!c) continue;
+    unread += c->unread_count_;
+    if (i < 6) names += (names.empty() ? "" : ", ") + util::clean(c->title_, true);
+  }
+  int y2 = y1 + lineH(fBold) + FS / 6;
+  int bwid = 0;
+  if (unread > 0) {
+    std::string n = unread > 999 ? "999+" : std::to_string(unread);
+    int bhh = lineH(fSmallBold);
+    bwid = std::max(textW(fSmallBold, n) + FS * 2 / 3, bhh);
+    fillRound(W - rightPad() - bwid, y2, bwid, bhh, bhh / 2, LGRAY);
+    text(fSmallBold, BLACK, W - rightPad() - bwid, y2, bwid, bhh, n, ALIGN_CENTER | VALIGN_MIDDLE);
+    bwid += pad;
+  }
+  line1(fSmall, DGRAY, x, y2, w - bwid, names);
+  FillArea(x, y + rh - 1, W - x - rightPad(), 1, LGRAY);
+  addHit(0, y, W, rh, H_CHAT, ARCHIVE_ROW);
+}
+
+static void showList(const std::string &key) {
+  listKey = key;
+  listPage = 0;
+  tg.loadChats(key, 60);
+  invalidate(true);
+}
+
 static void drawChats() {
   ClearScreen();
   hits.clear();
   auto ids = currentChatIds();
   int per = rowsPerPage();
   int pages = std::max(1, static_cast<int>((ids.size() + per - 1) / per));
-  if (!searchMode && !tg.listComplete["main"]) pages = std::max(pages, listPage + 2);
+  if (!searchMode && !tg.listComplete[listKey]) pages = std::max(pages, listPage + 2);
   if (listPage >= pages) listPage = pages - 1;
   int y = headerH();
   size_t start = static_cast<size_t>(listPage) * per;
   for (size_t i = start; i < ids.size() && i < start + per; i++) {
+    if (ids[i] == ARCHIVE_ROW && !searchMode) {
+      drawArchiveRow(y);
+      y += rowH();
+      continue;
+    }
     auto c = tg.chat(ids[i]);
     if (!c) continue;
     drawChatRow(*c, y);
     y += rowH();
   }
   if (ids.empty()) {
-    std::string msg = (searchMode || tg.listComplete["main"]) ? tr(S_NOTHING) : "…";
+    std::string msg = (searchMode || tg.listComplete[listKey]) ? tr(S_NOTHING) : "…";
     text(fReg, DGRAY, 0, H / 3, W, FS * 3, msg, ALIGN_CENTER | VALIGN_MIDDLE);
   }
   // load more when the user reaches the end of what is known
-  if (!searchMode && start + per * 2 >= ids.size()) tg.loadChats("main", 60);
+  if (!searchMode && start + per * 2 >= ids.size()) tg.loadChats(listKey, 60);
   if (!ids.empty()) {
     double total = std::max(ids.size(), start + per);
     scrollbar(headerH() + FS / 4, H - headerH() - footerH() - FS / 2, start / total, per / total);
   }
-  drawHeader(searchMode ? searchQuery : std::string(tr(S_CHATS)), searchMode, MENU_ICON, H_MENU, true);
+  std::string title = searchMode ? searchQuery : std::string(tr(listKey == "archive" ? S_ARCHIVE : S_CHATS));
+  drawHeader(title, searchMode || listKey != "main", MENU_ICON, H_MENU, true);
   drawPager(listPage, pages);
 }
 
@@ -2139,12 +2200,16 @@ static void handleTap(int x, int y) {
       else if (h.kind == H_LANG) chooseLanguage(static_cast<int>(h.a));
       break;
     case Scr::Chats:
-      if (h.kind == H_CHAT) openChatScreen(h.a);
+      if (h.kind == H_CHAT && h.a == ARCHIVE_ROW) showList("archive");
+      else if (h.kind == H_CHAT) openChatScreen(h.a);
       else if (h.kind == H_MENU) chatsMenu();
       else if (h.kind == H_PREV) { listPage = std::max(0, listPage - 1); invalidate(); }
       else if (h.kind == H_NEXT) { listPage++; invalidate(); }
       else if (h.kind == H_SEARCH) startSearch();
-      else if (h.kind == H_BACK) endSearch();
+      else if (h.kind == H_BACK) {
+        if (searchMode) endSearch();
+        else showList("main");
+      }
       break;
     case Scr::Chat:
       if (h.kind == H_BACK) closeChatScreen();
@@ -2186,7 +2251,7 @@ static void foundTap(const Hit &h) {
 static void handleLongTap(int x, int y) {
   for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
     if (x >= it->x && x < it->x + it->w && y >= it->y && y < it->y + it->h) {
-      if (scr == Scr::Chats && it->kind == H_CHAT) { chatContextMenu(it->a); return; }
+      if (scr == Scr::Chats && it->kind == H_CHAT && it->a != ARCHIVE_ROW) { chatContextMenu(it->a); return; }
       if (scr == Scr::Chat && (it->kind == H_MSG || it->kind == H_FILE)) { messageMenu(it->a); return; }
     }
   }
@@ -2219,6 +2284,7 @@ static void goBack() {
     case Scr::Found: setScreen(Scr::Chat); break;
     case Scr::Chats:
       if (searchMode) endSearch();
+      else if (listKey != "main") showList("main");
       break;
     default: break;
   }

@@ -135,6 +135,21 @@ int main(int argc, char **argv) {
   for (int i = 0; i < 14; i++)
     addChat(200 + i, "Чат номер " + std::to_string(i + 1), i % 2, 900 - i,
             textMsg(200 + i, 1, 4, i % 3 == 0, now - 86400 * (i + 3), "Повідомлення " + std::to_string(i)), i % 4 == 0 ? i : 0);
+  // two archived chats
+  for (int k = 0; k < 2; k++) {
+    auto c = make_object<td_api::chat>();
+    c->id_ = 300 + k;
+    c->title_ = k == 0 ? "Старий проєкт" : "Розсилка магазину";
+    c->type_ = make_object<td_api::chatTypePrivate>(300 + k);
+    c->last_message_ = textMsg(300 + k, 1, 4, false, now - 86400 * 30, "архівне повідомлення");
+    c->unread_count_ = k == 1 ? 7 : 0;
+    c->notification_settings_ = ns(0);
+    auto p = make_object<td_api::chatPosition>();
+    p->list_ = make_object<td_api::chatListArchive>();
+    p->order_ = 500 - k;
+    c->positions_.push_back(std::move(p));
+    tg.update(make_object<td_api::updateNewChat>(std::move(c)));
+  }
   // avatars: two chats with a photo, the rest show their first letter
   writePgm("/tmp/tgtest/ava1.pgm", 160, 160);
   for (int64_t cid : {100, 102}) {
@@ -145,6 +160,9 @@ int main(int argc, char **argv) {
   tg.listComplete["main"] = true;
   scr = Scr::Chats;
   shot("04_chats");
+  listKey = "archive";
+  shot("04c_archive");
+  listKey = "main";
   // drag the scrollbar from top to bottom: should land on the last page
   scr = Scr::Chats;
   listPage = 0;

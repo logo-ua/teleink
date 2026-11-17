@@ -733,6 +733,7 @@ class Tg {
           if (o->get_id() == td_api::user::ID) myId = static_cast<td_api::user &>(*o).id_;
         });
         loadChats("main", 60);
+        loadChats("archive", 40);  // to know whether to show the Archive row
         break;
       case td_api::authorizationStateLoggingOut::ID:
         ready = false;
