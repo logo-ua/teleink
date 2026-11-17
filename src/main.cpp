@@ -967,7 +967,36 @@ static void circleMask(int x, int y, int d) {
 
 static int avatarSize() { return lineH(fBold) + lineH(fSmall) + FS / 6; }
 
+// Round icons like the phone app: white glyph on a dark circle.
+static void drawArchiveIcon(int x, int y, int d) {
+  fillRound(x, y, d, d, d / 2, DGRAY);
+  int cx = x + d / 2;
+  int lidW = d * 46 / 100, lidH = std::max(3, d * 10 / 100), lidY = y + d * 29 / 100;
+  fillRound(cx - lidW / 2, lidY, lidW, lidH, std::max(1, lidH / 3), WHITE);
+  int bodyW = d * 40 / 100, bodyH = d * 30 / 100, bodyY = lidY + lidH + std::max(1, d / 40);
+  fillRound(cx - bodyW / 2, bodyY, bodyW, bodyH, std::max(2, d / 20), WHITE);
+  int slotW = d * 16 / 100, slotH = std::max(3, d * 6 / 100);
+  fillRound(cx - slotW / 2, bodyY + bodyH / 4, slotW, slotH, slotH / 2, DGRAY);
+}
+
+static void drawSavedIcon(int x, int y, int d) {
+  fillRound(x, y, d, d, d / 2, DGRAY);
+  int bw = d * 34 / 100, bh = d * 46 / 100;
+  int bx = x + (d - bw) / 2, by = y + (d - bh) / 2;
+  fillRound(bx, by, bw, bh, std::max(2, d / 22), WHITE);
+  // V notch cut into the bottom edge
+  int notch = bh * 30 / 100, cx = bx + bw / 2;
+  for (int j = 0; j <= notch; j++) {
+    int half = j * (bw / 2) / std::max(1, notch);
+    FillArea(cx - half, by + bh - notch + j, 2 * half + 1, 1, DGRAY);
+  }
+}
+
 static void drawAvatar(const td_api::chat &c, int x, int y, int d) {
+  if (c.id_ == tg.myId && tg.myId) {
+    drawSavedIcon(x, y, d);
+    return;
+  }
   if (c.photo_ && c.photo_->small_) {
     auto f = tg.file(c.photo_->small_.get());
     if (Tg::done(f)) {
@@ -1042,13 +1071,7 @@ static void drawChatRow(const td_api::chat &c, int y) {
 static void drawArchiveRow(int y) {
   int pad = FS / 2, rh = rowH(), ad = avatarSize();
   int ax = pad, ay = y + (rh - ad) / 2;
-  fillRound(ax, ay, ad, ad, ad / 2, LGRAY);
-  // box: lid and body
-  int bw = ad / 2, bh = ad / 3, bx = ax + (ad - bw) / 2, by = ay + ad / 2 - bh / 3;
-  int t = std::max(2, FS / 12);
-  fillRound(bx - t, by - bh / 3 - t, bw + 2 * t, bh / 3, 2, BLACK);
-  roundBox(bx, by, bw, bh, LGRAY, BLACK, t);
-  FillArea(bx + bw / 3, by + bh / 3, bw / 3, t, BLACK);
+  drawArchiveIcon(ax, ay, ad);
 
   int x = pad + ad + pad, w = W - x - rightPad();
   int y1 = y + FS / 3;
