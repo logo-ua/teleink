@@ -1,0 +1,48 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host tools
+        run: sudo apt-get update && sudo apt-get install -y gperf cmake zip
+
+      - name: Restore dependencies
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/setup.sh') }}
+
+      - name: Prepare SDK, Zig, OpenSSL and TDLib
+        run: scripts/setup.sh
+
+      - name: Build
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || github.sha }}
+        run: scripts/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Teleink
+          path: out/Teleink-*.zip
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/Teleink-*.zip
