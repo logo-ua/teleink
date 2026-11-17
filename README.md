@@ -18,7 +18,7 @@ Unofficial client. Uses the Telegram API via [TDLib](https://github.com/tdlib/td
 ## Install Telegram on PocketBook
 
 1. Download the zip from [Releases](../../releases/latest).
-2. Copy its contents to the root of the reader (`Teleink.app` → `applications/`).
+2. Unpack it and copy everything into the `applications` folder of the reader.
 3. Open **Teleink** in Applications.
 
 No built-in API keys? Get `api_id` and `api_hash` at [my.telegram.org](https://my.telegram.org) → API development tools.
@@ -42,6 +42,6 @@ Made by [LOGO.UA](https://logo.ua) · [MIT](LICENSE) · [third-party notices](TH
 
 ---
 
-**Українська — Telegram для PocketBook.** Неофіційний клієнт Telegram для електронних книг PocketBook. Скопіюйте вміст архіву з [Releases](../../releases) у корінь рідера й відкрийте **Teleink**. Мову обирають під час першого запуску.
+**Українська — Telegram для PocketBook.** Неофіційний клієнт Telegram для електронних книг PocketBook. Скопіюйте вміст архіву з [Releases](../../releases) у папку `applications` на рідері й відкрийте **Teleink**. Мову обирають під час першого запуску.
 
-**Русский — Telegram для PocketBook.** Неофициальный клиент Telegram для электронных книг PocketBook. Скопируйте содержимое архива из [Releases](../../releases) в корень ридера и откройте **Teleink**. Язык выбирается при первом запуске.
+**Русский — Telegram для PocketBook.** Неофициальный клиент Telegram для электронных книг PocketBook. Скопируйте содержимое архива из [Releases](../../releases) в папку `applications` на ридере и откройте **Teleink**. Язык выбирается при первом запуске.

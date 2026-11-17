@@ -36,17 +36,17 @@ L="$PREFIX/lib"
   "$SYSROOT/usr/local/lib/libinkview.so" \
   -lpthread -ldl -lm -Wl,--gc-sections -s
 
-# release zip: copy its contents to the root of the reader's memory
+# release zip: copy its contents into the "applications" folder of the reader
 PKG="$OUT/pkg"
 rm -rf "$PKG"
-mkdir -p "$PKG/applications/icons"
-cp "$OUT/$APP_NAME.app" "$PKG/applications/"
-cp "$ROOT/packaging/icons/"*.bmp "$PKG/applications/icons/"
-cp "$ROOT/packaging/README.txt" "$PKG/README.txt"
-# the key template is only useful when the build has no keys of its own
-[ ${#DEFS[@]} -eq 0 ] && cp "$ROOT/packaging/teleink-api.txt" "$PKG/teleink-api.txt"
-cp "$ROOT/LICENSE" "$PKG/LICENSE.txt"
-cp "$ROOT/THIRD_PARTY_NOTICES.md" "$PKG/THIRD_PARTY_NOTICES.md"
+mkdir -p "$PKG/icons" "$PKG/Teleink-docs"
+cp "$OUT/$APP_NAME.app" "$PKG/"
+cp "$ROOT/packaging/icons/"*.bmp "$PKG/icons/"
+cp "$ROOT/packaging/README.txt" "$PKG/Teleink-docs/README.txt"
+# the key template is only useful when the build has no keys of its own (it goes to the root of the reader)
+[ ${#DEFS[@]} -eq 0 ] && cp "$ROOT/packaging/teleink-api.txt" "$PKG/Teleink-docs/teleink-api.txt"
+cp "$ROOT/LICENSE" "$PKG/Teleink-docs/LICENSE.txt"
+cp "$ROOT/THIRD_PARTY_NOTICES.md" "$PKG/Teleink-docs/THIRD_PARTY_NOTICES.md"
 ZIP="$OUT/Teleink-Telegram-for-PocketBook-$VERSION.zip"
 rm -f "$ZIP"
 (cd "$PKG" && zip -qr -9 "$ZIP" .)
