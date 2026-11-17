@@ -7,6 +7,7 @@
 #include <list>
 #include <memory>
 
+#include "launcher.h"
 #include "logo.h"
 #include "tg.h"
 #include "util.h"
@@ -2082,6 +2083,7 @@ static int mainHandler(int type, int par1, int par2) {
       initFonts();
       loadSettings();
       loadCreds();
+      if (launcher::registerIcon(FLASHDIR)) toast(tr(S_ICON_RESTART), 8000);
       tg.dataDir = gDataDir;
       tg.onIncoming = onIncoming;
       tg.onFileDone = onFileDone;

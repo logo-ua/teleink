@@ -114,6 +114,7 @@
   X(SD, "SD", "SD", "SD")                                                                   \
   X(TODAY, "Сьогодні", "Today", "Сегодня")                                                  \
   X(YESTERDAY, "Вчора", "Yesterday", "Вчера")                                               \
+  X(ICON_RESTART, "Іконка з'явиться після перезавантаження рідера", "The icon appears after restarting the reader", "Иконка появится после перезагрузки ридера") \
   X(EMOJI, "(емодзі)", "(emoji)", "(эмодзи)")
 
 #define TELEINK_ENUM(id, uk, en, ru) S_##id,
