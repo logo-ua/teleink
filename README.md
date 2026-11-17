@@ -1,17 +1,19 @@
 <img src="docs/icon.png" width="96" align="right">
 
-# Teleink
+# Teleink — Unofficial Telegram for PocketBook
 
-Unofficial Telegram client for PocketBook e-readers (firmware 6.x).
-Uses the Telegram API via [TDLib](https://github.com/tdlib/td). Not affiliated with Telegram.
+**Telegram for PocketBook e-readers**: read and send messages, open channels, download files and books straight to your reader.
+Works on PocketBook Verse, Verse Pro, Era, InkPad, Touch Lux, Touch HD and other models with firmware 6.x.
+
+Unofficial client. Uses the Telegram API via [TDLib](https://github.com/tdlib/td). Not affiliated with Telegram.
 
 | | | | |
 |---|---|---|---|
 | ![](docs/screenshots/language.png) | ![](docs/screenshots/chats.png) | ![](docs/screenshots/chat.png) | ![](docs/screenshots/channel.png) |
 
-## Install
+## Install Telegram on PocketBook
 
-1. Download the zip from [Releases](../../releases).
+1. Download the zip from [Releases](../../releases/latest).
 2. Copy its contents to the root of the reader (`Teleink.app` → `applications/`).
 3. Open **Teleink** in Applications.
 
@@ -19,7 +21,7 @@ No built-in API keys? Get `api_id` and `api_hash` at [my.telegram.org](https://m
 
 ## Features
 
-Chats only, nothing else: read and write, files (download to `Downloads/Teleink`, books and photos open in the reader, send from the reader) · English, Українська, Русский.
+Telegram chats and channels on an e-ink screen, nothing else: read and write, files (download to `Downloads/Teleink`, books and photos open in the reader, send from the reader) · English, Українська, Русский.
 
 ## Build
 
@@ -36,6 +38,6 @@ Embed keys: `TG_API_ID=… TG_API_HASH=… scripts/build.sh`, or add `TG_API_ID`
 
 ---
 
-**Українська.** Неофіційний клієнт Telegram для PocketBook. Скопіюйте вміст архіву з [Releases](../../releases) у корінь рідера й відкрийте **Teleink**. Мову обирають під час першого запуску.
+**Українська — Telegram для PocketBook.** Неофіційний клієнт Telegram для електронних книг PocketBook. Скопіюйте вміст архіву з [Releases](../../releases) у корінь рідера й відкрийте **Teleink**. Мову обирають під час першого запуску.
 
-**Русский.** Неофициальный клиент Telegram для PocketBook. Скопируйте содержимое архива из [Releases](../../releases) в корень ридера и откройте **Teleink**. Язык выбирается при первом запуске.
+**Русский — Telegram для PocketBook.** Неофициальный клиент Telegram для электронных книг PocketBook. Скопируйте содержимое архива из [Releases](../../releases) в корень ридера и откройте **Teleink**. Язык выбирается при первом запуске.

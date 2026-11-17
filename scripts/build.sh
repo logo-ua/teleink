@@ -47,7 +47,7 @@ cp "$ROOT/packaging/README.txt" "$PKG/README.txt"
 [ ${#DEFS[@]} -eq 0 ] && cp "$ROOT/packaging/teleink-api.txt" "$PKG/teleink-api.txt"
 cp "$ROOT/LICENSE" "$PKG/LICENSE.txt"
 cp "$ROOT/THIRD_PARTY_NOTICES.md" "$PKG/THIRD_PARTY_NOTICES.md"
-ZIP="$OUT/Teleink-$VERSION.zip"
+ZIP="$OUT/Teleink-Telegram-for-PocketBook-$VERSION.zip"
 rm -f "$ZIP"
 (cd "$PKG" && zip -qr -9 "$ZIP" .)
 ls -la "$OUT/$APP_NAME.app" "$ZIP"
