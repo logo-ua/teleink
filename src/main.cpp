@@ -26,7 +26,7 @@ static std::string gDownloadDir;
 static int W = 758, H = 1024, FS = 26;
 static ifont *fReg, *fBold, *fSmall, *fSmallBold, *fBig, *fTiny, *fHuge;
 
-enum class Scr { Login, Chats, Chat, Files };
+enum class Scr { Login, Chats, Chat, Files, Found };
 static Scr scr = Scr::Login;
 
 struct Settings {
@@ -182,7 +182,7 @@ struct Hit {
 };
 enum {
   H_BACK = 1, H_MENU, H_PREV, H_NEXT, H_CHAT, H_MSG, H_FILE, H_INPUT, H_REPLY_CANCEL,
-  H_LOGIN1, H_PICK, H_ATTACH, H_SPONSORED, H_LANG, H_SEARCH
+  H_LOGIN1, H_PICK, H_ATTACH, H_SPONSORED, H_LANG, H_SEARCH, H_FOUND
 };
 static std::vector<Hit> hits;
 
@@ -286,12 +286,12 @@ struct ScrollState {
   double frac = 0;  // 0 = top, 1 = bottom
 } sb;
 
-static int sbWidth() { return 3; }
+static int sbWidth() { return std::max(6, FS / 4); }
 static int sbX() { return W - sbWidth() - 3; }
 
-static void drawThumb(double frac, int w) {
+static void drawThumb(double frac, int w, int color = LGRAY) {
   int ty = sb.y + static_cast<int>((sb.h - sb.thumbH) * frac);
-  fillRound(W - w - 3, ty, w, sb.thumbH, std::min(w / 2, 3), DGRAY);
+  fillRound(W - w - 2, ty, w, sb.thumbH, w / 2, color);
 }
 
 static void scrollbar(int y, int h, double start, double size) {
@@ -300,7 +300,7 @@ static void scrollbar(int y, int h, double start, double size) {
   sb.y = y;
   sb.h = h;
   sb.size = size;
-  sb.thumbH = std::max(FS * 3 / 2, static_cast<int>(h * size));
+  sb.thumbH = std::max(FS * 2, static_cast<int>(h * size));
   double frac = std::min(1.0, std::max(0.0, start / std::max(1e-9, 1.0 - size)));
   drawThumb(frac, sbWidth());
 }
@@ -309,9 +309,9 @@ static void scrollbar(int y, int h, double start, double size) {
 static void dragScrollbar(int y) {
   double frac = (y - sb.y - sb.thumbH / 2.0) / std::max(1, sb.h - sb.thumbH);
   sb.frac = std::min(1.0, std::max(0.0, frac));
-  int stripW = FS / 2;
+  int stripW = sbWidth() + 4;
   FillArea(W - stripW, sb.y, stripW, sb.h, WHITE);
-  drawThumb(sb.frac, FS / 4);
+  drawThumb(sb.frac, sbWidth(), DGRAY);
   DynamicUpdate(W - stripW, sb.y, stripW, sb.h);
 }
 
@@ -1421,7 +1421,7 @@ static void drawChat() {
   // header
   std::string title = chat ? util::clean(chat->title_, true) : "";
   if (chat && chat->id_ == tg.myId) title = tr(S_SAVED);
-  drawHeader(title, true, MENU_ICON);
+  drawHeader(title, true, MENU_ICON, H_MENU, true);
 
   // input bar
   int ih = inputH(), y = H - ih, pad = FS / 2;
@@ -1441,7 +1441,7 @@ static void drawChat() {
   // paging buttons
   int arrowW = FS * 2;
   bool canOlder = !order.empty() && (topShownId != order.front() || topPartial || !tg.historyEnd || (tallShown && tallOffset > 0));
-  bool canNewer = bottomMsgId != 0 || (tallShown && tallOffset < tallMax);
+  bool canNewer = bottomMsgId != 0 || tg.detached || (tallShown && tallOffset < tallMax);
   triangle(pad, cy, arrowW, bh, UP, canOlder ? BLACK : LGRAY);
   if (canOlder) addHit(0, cy, arrowW + pad, bh, H_PREV);
   triangle(pad + arrowW, cy, arrowW, bh, DOWN, canNewer ? BLACK : LGRAY);
@@ -1486,6 +1486,39 @@ static void chatOlder() {
   invalidate(true);
 }
 
+// Index of the last message that fits on screen when message startIdx is at the top.
+static size_t fillDown(const std::vector<int64_t> &order, size_t startIdx) {
+  int avail = msgBottom() - msgTop() - FS / 3;
+  int used = 0;
+  size_t last = startIdx;
+  for (size_t k = startIdx; k < order.size(); k++) {
+    auto m = tg.message(order[k]);
+    if (!m) continue;
+    int h = layoutMessage(*m, prevDateOf(order, k), false, 0);
+    if (used + h > avail && k != startIdx) break;
+    used += h;
+    last = k;
+  }
+  return last;
+}
+
+// Shows the screen ending at index last; at the end of the loaded window either sticks to the
+// newest message or, after a jump, asks for newer ones.
+static void showUntil(const std::vector<int64_t> &order, size_t last) {
+  if (last + 1 >= order.size()) {
+    if (tg.detached) {
+      bottomMsgId = order[last];
+      tg.loadNewer();
+    } else {
+      bottomMsgId = 0;
+    }
+  } else {
+    bottomMsgId = order[last];
+  }
+  tallOffset = 0;
+  invalidate(true);
+}
+
 static void chatNewer() {
   auto order = msgOrder();
   if (tallShown && tallOffset < tallMax) {
@@ -1495,21 +1528,11 @@ static void chatNewer() {
   }
   if (order.empty() || bottomMsgId == 0) return;
   size_t bottom = indexOf(order, bottomMsgId);
-  // fill downward from the message after the current bottom
-  int avail = msgBottom() - msgTop() - FS / 3;
-  int used = 0;
-  size_t last = bottom;
-  for (size_t k = bottom + 1; k < order.size(); k++) {
-    auto m = tg.message(order[k]);
-    if (!m) continue;
-    int h = layoutMessage(*m, prevDateOf(order, k), false, 0);
-    if (used + h > avail && last != bottom) break;
-    used += h;
-    last = k;
+  if (bottom + 1 >= order.size()) {
+    tg.loadNewer();  // only does something after a jump
+    return;
   }
-  bottomMsgId = (last + 1 >= order.size()) ? 0 : order[last];
-  tallOffset = 0;
-  invalidate(true);
+  showUntil(order, fillDown(order, bottom + 1));
 }
 
 static void onSendText(char *t) {
@@ -1518,6 +1541,7 @@ static void onSendText(char *t) {
     std::string s = t;
     while (!s.empty() && (s.back() == ' ' || s.back() == '\n')) s.pop_back();
     if (!s.empty() && tg.openChatId) {
+      tg.reattach();
       tg.sendText(tg.openChatId, s, replyTo);
       replyTo = 0;
       bottomMsgId = 0;
@@ -1707,6 +1731,79 @@ static void pickTapped(size_t i) {
   });
 }
 
+// ---------- search inside a chat ----------
+static std::vector<object_ptr<td_api::message>> found;
+static std::string foundQuery;
+static bool foundLoading = false;
+static int foundPage = 0;
+
+static void onChatSearch(char *t) {
+  modalOpen = false;
+  std::string q = t ? util::trim(t) : "";
+  if (q.empty() || !tg.openChatId) { invalidate(true); return; }
+  foundQuery = q;
+  found.clear();
+  foundPage = 0;
+  foundLoading = true;
+  int64_t chatId = tg.openChatId;
+  tg.searchMessages(q, [chatId](std::vector<object_ptr<td_api::message>> res) {
+    if (chatId != tg.openChatId) return;
+    found = std::move(res);
+    foundLoading = false;
+    invalidate(true);
+  });
+  setScreen(Scr::Found);
+}
+
+static void startChatSearch() {
+  snprintf(kbuf, sizeof kbuf, "%s", foundQuery.c_str());
+  modalOpen = true;
+  OpenKeyboard(tr(S_SEARCH), kbuf, 128, KBD_NORMAL, onChatSearch);
+}
+
+static void drawFound() {
+  ClearScreen();
+  hits.clear();
+  int per = rowsPerPage();
+  int pages = std::max(1, static_cast<int>((found.size() + per - 1) / per));
+  if (foundPage >= pages) foundPage = pages - 1;
+  int y = headerH(), pad = FS / 2, rh = rowH();
+  size_t start = static_cast<size_t>(foundPage) * per;
+  for (size_t i = start; i < found.size() && i < start + per; i++) {
+    auto &m = *found[i];
+    std::string who = m.is_outgoing_ ? std::string(tr(S_YOU)) : tg.senderName(m.sender_id_.get());
+    std::string date = util::shortDate(m.date_);
+    int dw = textW(fSmall, date) + pad;
+    int y1 = y + FS / 3;
+    line1(fBold, BLACK, pad, y1, W - 2 * pad - dw, who);
+    line1(fSmall, DGRAY, W - pad - dw, y1 + (lineH(fBold) - lineH(fSmall)) / 2, dw, date, ALIGN_RIGHT);
+    line1(fSmall, DGRAY, pad, y1 + lineH(fBold) + FS / 6, W - 2 * pad, previewOf(&m));
+    FillArea(pad, y + rh - 1, W - 2 * pad, 1, LGRAY);
+    addHit(0, y, W, rh, H_FOUND, m.id_);
+    y += rh;
+  }
+  if (found.empty())
+    text(fReg, DGRAY, 0, H / 3, W, FS * 3, foundLoading ? "…" : tr(S_NOTHING), ALIGN_CENTER | VALIGN_MIDDLE);
+  if (!found.empty())
+    scrollbar(headerH() + FS / 4, H - headerH() - footerH() - FS / 2, start / static_cast<double>(found.size()),
+              per / static_cast<double>(std::max<size_t>(found.size(), per)));
+  drawHeader(foundQuery, true, "", H_MENU, false);
+  drawPager(foundPage, pages);
+}
+
+// Opens the chat at a found message: it is shown at the top, newer messages below it.
+static void openFound(int64_t msgId) {
+  setScreen(Scr::Chat);
+  bottomMsgId = msgId;
+  tallOffset = 0;
+  tg.jumpTo(msgId, [msgId] {
+    if (scr != Scr::Chat) return;
+    auto order = msgOrder();
+    if (order.empty()) return;
+    showUntil(order, fillDown(order, indexOf(order, msgId)));
+  });
+}
+
 // ---------- chat menus ----------
 static void messageMenu(int64_t msgId) {
   auto m = tg.message(msgId);
@@ -1760,6 +1857,7 @@ static void drawScreen() {
     case Scr::Chats: drawChats(); break;
     case Scr::Chat: drawChat(); break;
     case Scr::Files: drawFiles(); break;
+    case Scr::Found: drawFound(); break;
   }
   drawToast();
   if (needFull || partialCount >= 12) {
@@ -1813,6 +1911,9 @@ static void pollTimer() {
     case Scr::Chats:
       if (tg.dirtyChats) invalidate();
       break;
+    case Scr::Found:
+      if (tg.dirtyChats) invalidate();
+      break;
     case Scr::Chat:
       if (tg.dirtyMsgs) invalidate();
       if (!tg.dirtyFiles.empty()) invalidate();
@@ -1854,21 +1955,23 @@ static void scrollTo(double frac) {
     int per = rowsPerPage();
     int pages = std::max(1, static_cast<int>((ids.size() + per - 1) / per));
     listPage = static_cast<int>(frac * (pages - 1) + 0.5);
+  } else if (scr == Scr::Found) {
+    int per = rowsPerPage();
+    int pages = std::max(1, static_cast<int>((found.size() + per - 1) / per));
+    foundPage = static_cast<int>(frac * (pages - 1) + 0.5);
   } else if (scr == Scr::Chat) {
     auto order = msgOrder();
     if (order.empty()) return;
-    size_t n = order.size();
-    // frac is where the top of the screen lands; keep about a screen of messages below it
-    size_t top = static_cast<size_t>(frac * (n - 1) + 0.5);
-    size_t shown = 1;
-    if (sb.size > 0 && sb.size < 1) shown = std::max<size_t>(1, static_cast<size_t>(sb.size * n));
-    size_t bottom = std::min(n - 1, top + shown - 1);
-    bottomMsgId = bottom >= n - 1 ? 0 : order[bottom];
-    tallOffset = 0;
+    // frac is where the top of the screen lands
+    size_t top = static_cast<size_t>(frac * (order.size() - 1) + 0.5);
     if (top == 0) tg.loadOlder();
+    showUntil(order, fillDown(order, top));
+    return;
   }
   invalidate(true);
 }
+
+static void foundTap(const Hit &h);
 
 static void handleTap(int x, int y) {
   const Hit *hit = nullptr;
@@ -1901,6 +2004,7 @@ static void handleTap(int x, int y) {
       break;
     case Scr::Chat:
       if (h.kind == H_BACK) closeChatScreen();
+      else if (h.kind == H_SEARCH) startChatSearch();
       else if (h.kind == H_MENU) chatMenu();
       else if (h.kind == H_INPUT) composeMessage();
       else if (h.kind == H_ATTACH) openPicker();
@@ -1910,6 +2014,9 @@ static void handleTap(int x, int y) {
       else if (h.kind == H_FILE) fileTapped(h.a, static_cast<int32_t>(h.b));
       else if (h.kind == H_MSG) messageMenu(h.a);
       else if (h.kind == H_SPONSORED) sponsoredTapped(h.a);
+      break;
+    case Scr::Found:
+      foundTap(h);
       break;
     case Scr::Files:
       if (h.kind == H_BACK) setScreen(Scr::Chat);
@@ -1923,6 +2030,13 @@ static void handleTap(int x, int y) {
       }
       break;
   }
+}
+
+static void foundTap(const Hit &h) {
+  if (h.kind == H_BACK) setScreen(Scr::Chat);
+  else if (h.kind == H_FOUND) openFound(h.a);
+  else if (h.kind == H_PREV) { foundPage = std::max(0, foundPage - 1); invalidate(); }
+  else if (h.kind == H_NEXT) { foundPage++; invalidate(); }
 }
 
 static void handleLongTap(int x, int y) {
@@ -1939,6 +2053,7 @@ static void pageBack() {
     case Scr::Chats: if (listPage > 0) { listPage--; invalidate(); } break;
     case Scr::Chat: chatOlder(); break;
     case Scr::Files: if (pickPage > 0) { pickPage--; invalidate(); } break;
+    case Scr::Found: if (foundPage > 0) { foundPage--; invalidate(); } break;
     default: break;
   }
 }
@@ -1948,6 +2063,7 @@ static void pageForward() {
     case Scr::Chats: listPage++; invalidate(); break;
     case Scr::Chat: chatNewer(); break;
     case Scr::Files: pickPage++; invalidate(); break;
+    case Scr::Found: foundPage++; invalidate(); break;
     default: break;
   }
 }
@@ -1956,6 +2072,7 @@ static void goBack() {
   switch (scr) {
     case Scr::Chat: closeChatScreen(); break;
     case Scr::Files: setScreen(Scr::Chat); break;
+    case Scr::Found: setScreen(Scr::Chat); break;
     case Scr::Chats:
       if (searchMode) endSearch();
       break;
@@ -2039,7 +2156,7 @@ static int mainHandler(int type, int par1, int par2) {
       downX = par1;
       downY = par2;
       ignoreUp = false;
-      sb.candidate = sb.visible && (scr == Scr::Chats || scr == Scr::Chat) && par1 >= W - FS * 3 / 2 &&
+      sb.candidate = sb.visible && (scr == Scr::Chats || scr == Scr::Chat || scr == Scr::Found) && par1 >= W - FS * 2 &&
                      par2 >= sb.y - FS / 2 && par2 <= sb.y + sb.h + FS / 2;
       sb.dragging = false;
       return 1;
@@ -2071,7 +2188,7 @@ static int mainHandler(int type, int par1, int par2) {
         if (scr == Scr::Chat) { if (dy > 0) chatOlder(); else chatNewer(); }
         else { if (dy < 0) pageForward(); else pageBack(); }
       } else if (downX >= 0 && std::abs(dx) > W / 4 && std::abs(dx) > std::abs(dy)) {
-        if (scr == Scr::Chat || scr == Scr::Files) { if (dx > 0) goBack(); }
+        if (scr == Scr::Chat || scr == Scr::Files || scr == Scr::Found) { if (dx > 0) goBack(); }
         else { if (dx < 0) pageForward(); else pageBack(); }
       } else {
         handleTap(par1, par2);

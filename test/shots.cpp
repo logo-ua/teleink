@@ -228,6 +228,14 @@ int main(int argc, char **argv) {
     id++;
   }
   shot("06_chat_group");
+  // search inside the chat
+  foundQuery = "розділ";
+  found.clear();
+  found.push_back(textMsg(101, 3, 1, true, now - 4000, "А який розділ читаємо?"));
+  found.push_back(textMsg(101, 4, 3, false, now - 3900, "Третій, до сторінки 120."));
+  scr = Scr::Found;
+  shot("06d_found");
+  scr = Scr::Chat;
   chatOlder();
   shot("06b_chat_group_older");
   chatOlder();

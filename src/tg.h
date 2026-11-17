@@ -62,6 +62,9 @@ class Tg {
   std::map<int64_t, object_ptr<td_api::message>> msgs;
   bool historyLoading = false;
   bool historyEnd = false;
+  // after jumping to a found message the loaded window may not reach the newest messages
+  bool detached = false;
+  bool newerLoading = false;
   // sponsored messages of the open channel (required by the Telegram API terms)
   std::vector<object_ptr<td_api::sponsoredMessage>> sponsored;
   std::set<int64_t> sponsoredViewed;
@@ -327,6 +330,7 @@ class Tg {
     msgs.clear();
     historyEnd = false;
     historyLoading = false;
+    detached = newerLoading = false;
     send(make_object<td_api::openChat>(id));
     loadHistory(0, 30);
     loadSponsored();
@@ -407,6 +411,85 @@ class Tg {
       }
       // TDLib often returns only what is cached locally at first; keep asking until the page is full.
       if (static_cast<int>(got) < limit && attempt < 4) loadHistory(oldest, limit - static_cast<int>(got), attempt + 1);
+    });
+  }
+
+  // Loads the messages around msgId (replacing what is loaded) and calls done when they are in.
+  void jumpTo(int64_t msgId, std::function<void()> done) {
+    if (!openChatId) return;
+    int64_t chatId = openChatId;
+    msgs.clear();
+    historyEnd = false;
+    detached = true;
+    historyLoading = true;
+    auto f = make_object<td_api::getChatHistory>();
+    f->chat_id_ = chatId;
+    f->from_message_id_ = msgId;
+    f->offset_ = -15;
+    f->limit_ = 30;
+    send(std::move(f), [this, chatId, done](object_ptr<td_api::Object> o) {
+      if (chatId != openChatId) return;
+      historyLoading = false;
+      if (o->get_id() == td_api::messages::ID) {
+        for (auto &m : static_cast<td_api::messages &>(*o).messages_)
+          if (m) msgs[m->id_] = std::move(m);
+      }
+      checkAttached();
+      dirtyMsgs = true;
+      if (done) done();
+    });
+  }
+
+  // Back to the newest messages after a jump (e.g. before sending).
+  void reattach() {
+    if (!detached || !openChatId) return;
+    msgs.clear();
+    detached = newerLoading = false;
+    historyEnd = false;
+    loadHistory(0, 30);
+  }
+
+  // Loads messages newer than the newest loaded one (only needed after a jump).
+  void loadNewer() {
+    if (!openChatId || !detached || newerLoading || msgs.empty()) return;
+    newerLoading = true;
+    int64_t chatId = openChatId, from = msgs.rbegin()->first;
+    auto f = make_object<td_api::getChatHistory>();
+    f->chat_id_ = chatId;
+    f->from_message_id_ = from;
+    f->offset_ = -30;
+    f->limit_ = 30;
+    send(std::move(f), [this, chatId, from](object_ptr<td_api::Object> o) {
+      if (chatId != openChatId) return;
+      newerLoading = false;
+      bool gotNewer = false;
+      if (o->get_id() == td_api::messages::ID) {
+        for (auto &m : static_cast<td_api::messages &>(*o).messages_) {
+          if (!m) continue;
+          if (m->id_ > from) gotNewer = true;
+          msgs[m->id_] = std::move(m);
+        }
+      }
+      if (!gotNewer) detached = false;
+      checkAttached();
+      dirtyMsgs = true;
+    });
+  }
+
+  void searchMessages(const std::string &query, std::function<void(std::vector<object_ptr<td_api::message>>)> done) {
+    if (!openChatId) return;
+    auto f = make_object<td_api::searchChatMessages>();
+    f->chat_id_ = openChatId;
+    f->query_ = query;
+    f->from_message_id_ = 0;
+    f->offset_ = 0;
+    f->limit_ = 100;
+    send(std::move(f), [done](object_ptr<td_api::Object> o) {
+      std::vector<object_ptr<td_api::message>> out;
+      if (o->get_id() == td_api::foundChatMessages::ID)
+        for (auto &m : static_cast<td_api::foundChatMessages &>(*o).messages_)
+          if (m) out.push_back(std::move(m));
+      done(std::move(out));
     });
   }
 
@@ -570,8 +653,15 @@ class Tg {
     dirtyChats = true;
   }
 
+  // The loaded window is attached again once it contains the chat's newest message.
+  void checkAttached() {
+    auto c = chat(openChatId);
+    if (detached && c && c->last_message_ && msgs.count(c->last_message_->id_)) detached = false;
+  }
+
   void insertMessage(object_ptr<td_api::message> m) {
     if (!m || m->chat_id_ != openChatId) return;
+    if (detached && !m->is_outgoing_) return;  // would leave a gap; it shows up once we catch up
     msgs[m->id_] = std::move(m);
     dirtyMsgs = true;
   }
