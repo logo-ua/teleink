@@ -51,7 +51,17 @@ void DrawRect(int x, int y, int w, int h, int color) {
   FillArea(x, y, 1, h, color);
   FillArea(x + w - 1, y, 1, h, color);
 }
-void DrawLine(int x1, int y1, int x2, int y2, int color) { FillArea(std::min(x1, x2), std::min(y1, y2), std::abs(x2 - x1) + 1, std::abs(y2 - y1) + 1, color); }
+void DrawLine(int x1, int y1, int x2, int y2, int color) {
+  ensure();
+  int dx = std::abs(x2 - x1), sx = x1 < x2 ? 1 : -1, dy = -std::abs(y2 - y1), sy = y1 < y2 ? 1 : -1, err = dx + dy;
+  for (;;) {
+    px(x1, y1, gray(color));
+    if (x1 == x2 && y1 == y2) break;
+    int e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x1 += sx; }
+    if (e2 <= dx) { err += dx; y1 += sy; }
+  }
+}
 void SetClip(int x, int y, int w, int h) { clipX = x; clipY = y; clipW = w; clipH = h; }
 
 ifont *OpenFont(const char *name, int size, int aa) {

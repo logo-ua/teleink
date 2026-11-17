@@ -213,13 +213,84 @@ static void line1(ifont *f, int color, int x, int y, int w, const std::string &s
   text(f, color, x, y, w, lineH(f), s, align | VALIGN_TOP | DOTS);
 }
 
+// ---------- shapes (the device font has no arrows/ticks, so they are drawn) ----------
+static int radius() { return std::max(4, FS / 3); }
+
+// Filled rectangle with rounded corners.
+static void fillRound(int x, int y, int w, int h, int r, int color) {
+  r = std::min(r, std::min(w, h) / 2);
+  for (int j = 0; j < h; j++) {
+    int inset = 0;
+    int dy = j < r ? r - j : (j >= h - r ? j - (h - r - 1) : 0);
+    if (dy > 0) inset = r - static_cast<int>(std::sqrt(static_cast<double>(r * r - (dy - 0.5) * (dy - 0.5))) + 0.5);
+    if (w - 2 * inset > 0) FillArea(x + inset, y + j, w - 2 * inset, 1, color);
+  }
+}
+
+// Rounded box: border of the given thickness around a fill.
+static void roundBox(int x, int y, int w, int h, int fill, int border, int thick = 1) {
+  int r = radius();
+  if (thick > 0) {
+    fillRound(x, y, w, h, r, border);
+    fillRound(x + thick, y + thick, w - 2 * thick, h - 2 * thick, std::max(1, r - thick), fill);
+  } else {
+    fillRound(x, y, w, h, r, fill);
+  }
+}
+
+static void thickLine(int x1, int y1, int x2, int y2, int t, int color) {
+  for (int a = -t / 2; a <= (t - 1) / 2; a++)
+    for (int b = -t / 2; b <= (t - 1) / 2; b++) DrawLine(x1 + a, y1 + b, x2 + a, y2 + b, color);
+}
+
+// Filled isosceles triangle pointing up/down/left/right, centred in the box.
+enum Dir { UP, DOWN, LEFT, RIGHT };
+static void triangle(int x, int y, int w, int h, Dir d, int color) {
+  int s = std::min(w, h) * 2 / 5;
+  int cx = x + w / 2, cy = y + h / 2;
+  for (int k = 0; k <= s; k++) {
+    int half = k * 6 / 10;  // slightly flat triangle
+    if (d == UP) FillArea(cx - half, cy - s / 2 + k, 2 * half + 1, 1, color);
+    if (d == DOWN) FillArea(cx - half, cy + s / 2 - k, 2 * half + 1, 1, color);
+    if (d == LEFT) FillArea(cx - s / 2 + k, cy - half, 1, 2 * half + 1, color);
+    if (d == RIGHT) FillArea(cx + s / 2 - k, cy - half, 1, 2 * half + 1, color);
+  }
+}
+
+static void chevronLeft(int cx, int cy, int size, int color) {
+  int t = std::max(2, FS / 10);
+  thickLine(cx + size / 4, cy - size / 2, cx - size / 4, cy, t, color);
+  thickLine(cx - size / 4, cy, cx + size / 4, cy + size / 2, t, color);
+}
+
+// Read receipt: one or two small ticks ending at (x, baseline y).
+static int ticksWidth(bool two) { return (two ? FS * 7 / 10 : FS / 2); }
+static void ticks(int x, int y, bool two, int color) {
+  int s = FS / 3, t = std::max(1, FS / 14);
+  auto tick = [&](int ox) {
+    thickLine(ox, y - s / 2, ox + s / 3, y, t, color);
+    thickLine(ox + s / 3, y, ox + s, y - s, t, color);
+  };
+  tick(x);
+  if (two) tick(x + FS / 4);
+}
+
+// Thin scroll indicator on the right edge: start and size are fractions of the whole.
+static void scrollbar(int y, int h, double start, double size) {
+  if (size >= 1.0 || h <= 0) return;
+  int w = std::max(4, FS / 6), x = W - w - 2;
+  FillArea(x + w / 2 - 1, y, 2, h, LGRAY);
+  int th = std::max(FS, static_cast<int>(h * size));
+  int ty = y + static_cast<int>((h - th) * std::min(1.0, std::max(0.0, start / std::max(1e-9, 1.0 - size))));
+  fillRound(x, ty, w, th, w / 2, DGRAY);
+}
+
 static void button(int x, int y, int w, int h, const std::string &label, bool primary) {
   if (primary) {
-    FillArea(x, y, w, h, BLACK);
+    roundBox(x, y, w, h, BLACK, BLACK, 0);
     text(fBold, WHITE, x, y, w, h, label, ALIGN_CENTER | VALIGN_MIDDLE | DOTS);
   } else {
-    DrawRect(x, y, w, h, BLACK);
-    DrawRect(x + 1, y + 1, w - 2, h - 2, BLACK);
+    roundBox(x, y, w, h, WHITE, BLACK, 2);
     text(fBold, BLACK, x, y, w, h, label, ALIGN_CENTER | VALIGN_MIDDLE | DOTS);
   }
 }
@@ -235,7 +306,7 @@ static void drawHeader(const std::string &title, bool back, const std::string &r
   FillArea(0, 0, W, hh, WHITE);
   int x = FS / 2;
   if (back) {
-    text(fBig, BLACK, 0, 0, FS * 2, hh, "‹", ALIGN_CENTER | VALIGN_MIDDLE);
+    chevronLeft(FS, hh / 2, FS, BLACK);
     addHit(0, 0, FS * 3, hh, H_BACK);
     x = FS * 2;
   }
@@ -269,14 +340,14 @@ static void drawPager(int page, int pages) {
   FillArea(0, y, W, fh, WHITE);
   FillArea(0, y, W, 1, BLACK);
   if (page > 0) {
-    text(fBig, BLACK, 0, y, W / 3, fh, "◄", ALIGN_CENTER | VALIGN_MIDDLE);
+    triangle(0, y, W / 3, fh, LEFT, BLACK);
     addHit(0, y, W / 3, fh, H_PREV);
   }
   char b[64];
   snprintf(b, sizeof b, "%d / %d", page + 1, std::max(pages, 1));
   text(fSmall, DGRAY, W / 3, y, W / 3, fh, b, ALIGN_CENTER | VALIGN_MIDDLE);
   if (page + 1 < pages) {
-    text(fBig, BLACK, W * 2 / 3, y, W / 3, fh, "►", ALIGN_CENTER | VALIGN_MIDDLE);
+    triangle(W * 2 / 3, y, W / 3, fh, RIGHT, BLACK);
     addHit(W * 2 / 3, y, W / 3, fh, H_NEXT);
   }
 }
@@ -287,7 +358,7 @@ static void drawToast() {
   int h = textH(fSmall, W - 4 * pad, toastText) + 2 * pad;
   h = std::min(h, H / 4);
   int y = headerH() + pad;
-  FillArea(pad, y, W - 2 * pad, h, BLACK);
+  roundBox(pad, y, W - 2 * pad, h, BLACK, BLACK, 0);
   text(fSmall, WHITE, 2 * pad, y + pad, W - 4 * pad, h - 2 * pad, toastText, ALIGN_LEFT | VALIGN_TOP | DOTS);
 }
 
@@ -765,7 +836,7 @@ static void drawChatRow(const td_api::chat &c, int y) {
     bw = std::max(textW(fSmallBold, n) + FS * 2 / 3, bh);
     int bx = W - pad - bw;
     bool muted = tg.isMuted(c);
-    FillArea(bx, y2, bw, bh, muted ? LGRAY : BLACK);
+    fillRound(bx, y2, bw, bh, bh / 2, muted ? LGRAY : BLACK);
     text(fSmallBold, muted ? BLACK : WHITE, bx, y2, bw, bh, n, ALIGN_CENTER | VALIGN_MIDDLE);
     bw += pad;
   }
@@ -796,6 +867,10 @@ static void drawChats() {
   }
   // load more when the user reaches the end of what is known
   if (start + per * 2 >= ids.size()) tg.loadChats("main", 60);
+  if (!ids.empty()) {
+    double total = std::max(ids.size(), start + per);
+    scrollbar(headerH() + FS / 4, H - headerH() - footerH() - FS / 2, start / total, per / total);
+  }
   drawHeader(tr(S_CHATS), false, MENU_ICON);
   drawPager(listPage, pages);
 }
@@ -853,7 +928,7 @@ void openChatScreen(int64_t chatId);
 
 static void chatsMenu() {
   std::vector<std::pair<std::string, std::function<void()>>> items;
-  items.push_back({std::string("◄ ") + tr(S_LANGUAGE) + " ►", [] {
+  items.push_back({std::string(tr(S_LANG_LABEL)) + ": " + tr(S_LANGUAGE), [] {
                      chooseLanguage((settings.lang + 1) % 3);
                      tg.connection = tg.connection.empty() ? "" : tr(S_CONNECTING);
                    }});
@@ -964,7 +1039,7 @@ static std::string forwardLabel(const td_api::message &m) {
 
 static std::string fileStatus(const td_api::file *f, int64_t size, int32_t fileId) {
   std::string sz = size > 0 ? util::fileSize(size) : "";
-  if (Tg::done(f)) return sz + "  √";
+  if (Tg::done(f)) return sz + "  ·  " + tr(S_OPEN);
   if (f && f->local_ && (f->local_->is_downloading_active_ || wanted.count(fileId))) {
     int pct = size > 0 ? static_cast<int>(f->local_->downloaded_size_ * 100 / size) : 0;
     return std::to_string(std::min(pct, 99)) + "% · " + sz;
@@ -1011,12 +1086,12 @@ static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int 
   std::string reply = replySnippet(m);
 
   std::string foot = util::hhmm(m.date_);
+  int tickCount = 0;
   if (m.edit_date_ > 0) foot = std::string(tr(S_EDITED)) + " " + foot;
   if (m.is_outgoing_) {
     if (m.sending_state_ && m.sending_state_->get_id() == td_api::messageSendingStatePending::ID) foot += " •";
     else if (m.sending_state_ && m.sending_state_->get_id() == td_api::messageSendingStateFailed::ID) foot += " (!)";
-    else if (chat && chat->last_read_outbox_message_id_ >= m.id_) foot += " √√";
-    else foot += " √";
+    else tickCount = (chat && chat->last_read_outbox_message_id_ >= m.id_) ? 2 : 1;
   }
 
   // width of the bubble
@@ -1024,7 +1099,7 @@ static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int 
   if (media.kind != 0 || channel) {
     cw = cwMax;
   } else {
-    int need = std::max(textW(fSmall, foot), 1);
+    int need = std::max(textW(fTiny, foot) + (tickCount ? ticksWidth(tickCount == 2) + FS / 6 : 0), 1);
     if (!body.empty()) {
       // widest line of the text, capped at the bubble limit
       int mw = 0;
@@ -1058,13 +1133,8 @@ static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int 
   int bh = inner + 2 * (pad / 2) + pad / 2;
 
   if (draw) {
-    if (m.is_outgoing_ && !channel) {
-      FillArea(bx, y, bw, bh, 0xE0E0E0);
-      DrawRect(bx, y, bw, bh, DGRAY);
-    } else {
-      FillArea(bx, y, bw, bh, WHITE);
-      DrawRect(bx, y, bw, bh, BLACK);
-    }
+    if (m.is_outgoing_ && !channel) roundBox(bx, y, bw, bh, 0xE0E0E0, DGRAY);
+    else roundBox(bx, y, bw, bh, WHITE, BLACK);
     addHit(bx, y, bw, bh, H_MSG, m.id_);
     int cy = y + pad / 2;
     if (hSender) {
@@ -1083,7 +1153,7 @@ static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int 
     if (media.kind == 2) {
       auto f = tg.file(media.file);
       int iconS = mediaH - FS / 6;
-      FillArea(cx, cy, iconS, iconS, BLACK);
+      fillRound(cx, cy, iconS, iconS, radius(), BLACK);
       text(fTiny, WHITE, cx, cy, iconS, iconS, media.label, ALIGN_CENTER | VALIGN_MIDDLE);
       int tx = cx + iconS + pad, tw = cw - iconS - pad;
       line1(fSmallBold, BLACK, tx, cy, tw, util::clean(media.title, true));
@@ -1096,7 +1166,9 @@ static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int 
       text(fReg, BLACK, cx, cy, cw, hBody + 2, body);
       cy += hBody;
     }
-    line1(fTiny, DGRAY, cx, cy + FS / 6, cw, foot, ALIGN_RIGHT);
+    int tw = tickCount ? ticksWidth(tickCount == 2) + FS / 6 : 0;
+    line1(fTiny, DGRAY, cx, cy + FS / 6, cw - tw, foot, ALIGN_RIGHT);
+    if (tickCount) ticks(cx + cw - tw + FS / 6, cy + FS / 6 + lineH(fTiny) * 3 / 4, tickCount == 2, DGRAY);
   }
   return total + bh + gap;
 }
@@ -1150,9 +1222,7 @@ static int layoutSponsored(const td_api::sponsoredMessage &sp, bool draw, int y)
   int hBtn = btn.empty() ? 0 : lineH(fSmallBold) + FS / 2;
   int bh = pad + hLabel + hTitle + hBody + (hBtn ? hBtn + FS / 4 : 0) + pad;
   if (draw) {
-    FillArea(pad, y, bw, bh, WHITE);
-    DrawRect(pad, y, bw, bh, DGRAY);
-    DrawRect(pad + 1, y + 1, bw - 2, bh - 2, LGRAY);
+    roundBox(pad, y, bw, bh, WHITE, DGRAY);
     int cx = pad * 2, cy = y + pad;
     line1(fTiny, DGRAY, cx, cy, cw, label);
     cy += hLabel;
@@ -1160,7 +1230,7 @@ static int layoutSponsored(const td_api::sponsoredMessage &sp, bool draw, int y)
     if (hBody) { text(fSmall, BLACK, cx, cy, cw, hBody, body, ALIGN_LEFT | VALIGN_TOP | DOTS); cy += hBody; }
     if (hBtn) {
       cy += FS / 4;
-      DrawRect(cx, cy, cw, hBtn, BLACK);
+      roundBox(cx, cy, cw, hBtn, WHITE, BLACK);
       text(fSmallBold, BLACK, cx, cy, cw, hBtn, btn, ALIGN_CENTER | VALIGN_MIDDLE | DOTS);
     }
     addHit(pad, y, bw, bh, H_SPONSORED, sp.message_id_);
@@ -1195,6 +1265,7 @@ static void drawChat() {
   auto order = msgOrder();
   std::vector<int64_t> toView;
 
+  double sbStart = 0, sbSize = 1;
   SetClip(0, msgTop(), W, msgBottom() - msgTop());
   if (!order.empty()) {
     size_t bottom = bottomMsgId ? indexOf(order, bottomMsgId) : order.size() - 1;
@@ -1224,11 +1295,17 @@ static void drawChat() {
       }
     }
     if (!placed.empty() && placed.front().idx < 15) tg.loadOlder();
+    if (!placed.empty()) {
+      double n = static_cast<double>(order.size());
+      sbStart = placed.front().idx / n;
+      sbSize = (placed.back().idx - placed.front().idx + 1) / n;
+    }
   } else {
     std::string s = tg.historyLoading ? "…" : tr(S_NOTHING);
     text(fReg, DGRAY, 0, H / 3, W, FS * 3, s, ALIGN_CENTER | VALIGN_MIDDLE);
   }
   SetClip(0, 0, W, H);
+  scrollbar(msgTop() + FS / 4, msgBottom() - msgTop() - FS / 2, sbStart, sbSize);
   if (sp) {
     SetClip(0, msgBottom(), W, sponsorReserve);
     layoutSponsored(*sp, true, msgBottom());
@@ -1262,18 +1339,18 @@ static void drawChat() {
   int arrowW = FS * 2;
   bool canOlder = !order.empty() && (topShownId != order.front() || topPartial || !tg.historyEnd || (tallShown && tallOffset > 0));
   bool canNewer = bottomMsgId != 0 || (tallShown && tallOffset < tallMax);
-  text(fBig, canOlder ? BLACK : LGRAY, pad, cy, arrowW, bh, "▲", ALIGN_CENTER | VALIGN_MIDDLE);
+  triangle(pad, cy, arrowW, bh, UP, canOlder ? BLACK : LGRAY);
   if (canOlder) addHit(0, cy, arrowW + pad, bh, H_PREV);
-  text(fBig, canNewer ? BLACK : LGRAY, pad + arrowW, cy, arrowW, bh, "▼", ALIGN_CENTER | VALIGN_MIDDLE);
+  triangle(pad + arrowW, cy, arrowW, bh, DOWN, canNewer ? BLACK : LGRAY);
   if (canNewer) addHit(pad + arrowW, cy, arrowW, bh, H_NEXT);
   int ix = pad + arrowW * 2 + pad;
   int attachW = FS * 2;
   int iw = W - ix - pad - attachW - pad;
-  DrawRect(ix, cy, iw, bh, BLACK);
+  roundBox(ix, cy, iw, bh, WHITE, BLACK);
   text(fReg, DGRAY, ix + pad, cy, iw - 2 * pad, bh, tr(S_MESSAGE), ALIGN_LEFT | VALIGN_MIDDLE | DOTS);
   addHit(ix, cy, iw, bh, H_INPUT);
   // attach button: a paper clip is not in the font, so a plus sign
-  DrawRect(W - pad - attachW, cy, attachW, bh, BLACK);
+  roundBox(W - pad - attachW, cy, attachW, bh, WHITE, BLACK);
   text(fBig, BLACK, W - pad - attachW, cy, attachW, bh, "+", ALIGN_CENTER | VALIGN_MIDDLE);
   addHit(W - pad - attachW, cy, attachW + pad, bh, H_ATTACH);
 }
@@ -1357,11 +1434,11 @@ static void composeMessage() {
 static void openPath(const std::string &path) {
   std::string ext = util::extOf(path);
   if (util::isImageExt(ext)) {
-    OpenBook(path.c_str(), "", 0);
+    OpenBook(path.c_str(), "", OB_WITHRETURN);
     return;
   }
   if (util::isBookExt(ext)) {
-    OpenBook(path.c_str(), "", 0);
+    OpenBook(path.c_str(), "", OB_WITHRETURN);
     return;
   }
   toast(tr(S_NOT_SUPPORTED_FILE), 4000);

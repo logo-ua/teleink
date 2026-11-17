@@ -81,6 +81,7 @@
   X(NOTIFICATIONS, "Сповіщення", "Notifications", "Уведомления")                            \
   X(AUTO_PHOTOS, "Фото автоматично", "Auto-load photos", "Фото автоматически")              \
   X(LANGUAGE, "Українська", "English", "Русский")                                           \
+  X(LANG_LABEL, "Мова", "Language", "Язык")                                           \
   X(REFRESH, "Оновити екран", "Refresh screen", "Обновить экран")                           \
   X(ABOUT, "Про програму", "About", "О программе")                                          \
   X(ABOUT_TEXT, "Неофіційний клієнт Telegram.\nTelegram API · TDLib.\n\nФайли: Downloads/Teleink", "Unofficial Telegram client.\nTelegram API · TDLib.\n\nFiles: Downloads/Teleink", "Неофициальный клиент Telegram.\nTelegram API · TDLib.\n\nФайлы: Downloads/Teleink") \
