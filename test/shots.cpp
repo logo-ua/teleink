@@ -135,6 +135,13 @@ int main(int argc, char **argv) {
   for (int i = 0; i < 14; i++)
     addChat(200 + i, "Чат номер " + std::to_string(i + 1), i % 2, 900 - i,
             textMsg(200 + i, 1, 4, i % 3 == 0, now - 86400 * (i + 3), "Повідомлення " + std::to_string(i)), i % 4 == 0 ? i : 0);
+  // avatars: two chats with a photo, the rest show their first letter
+  writePgm("/tmp/tgtest/ava1.pgm", 160, 160);
+  for (int64_t cid : {100, 102}) {
+    auto c = tg.chat(cid);
+    c->photo_ = make_object<td_api::chatPhotoInfo>();
+    c->photo_->small_ = mkfile(static_cast<int32_t>(900 + cid), 5000, "/tmp/tgtest/ava1.pgm", true);
+  }
   tg.listComplete["main"] = true;
   scr = Scr::Chats;
   shot("04_chats");

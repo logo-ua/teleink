@@ -751,6 +751,12 @@ class Tg {
         dirtyChats = true;
         break;
       }
+      case td_api::updateChatPhoto::ID: {
+        auto &u = static_cast<td_api::updateChatPhoto &>(*o);
+        if (auto c = chat(u.chat_id_)) c->photo_ = std::move(u.photo_);
+        dirtyChats = true;
+        break;
+      }
       case td_api::updateChatTitle::ID: {
         auto &u = static_cast<td_api::updateChatTitle &>(*o);
         if (auto c = chat(u.chat_id_)) c->title_ = u.title_;

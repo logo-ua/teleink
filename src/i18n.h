@@ -116,6 +116,7 @@
   X(TODAY, "Сьогодні", "Today", "Сегодня")                                                  \
   X(YESTERDAY, "Вчора", "Yesterday", "Вчера")                                               \
   X(ICON_RESTART, "Іконка з'явиться після перезавантаження рідера", "The icon appears after restarting the reader", "Иконка появится после перезагрузки ридера") \
+  X(READER_HINT, "Файл відкриється в читалці рідера. Щоб повернутися в Teleink, торкніться середини сторінки (або кнопки «Меню») і виберіть «Назад».", "The file opens in the reader. To come back to Teleink, tap the middle of the page (or the Menu button) and choose Back.", "Файл откроется в читалке ридера. Чтобы вернуться в Teleink, коснитесь середины страницы (или кнопки «Меню») и выберите «Назад».") \
   X(EMOJI, "(емодзі)", "(emoji)", "(эмодзи)")
 
 #define TELEINK_ENUM(id, uk, en, ru) S_##id,

@@ -31,6 +31,7 @@ static Scr scr = Scr::Login;
 
 struct Settings {
   int lang = -1;  // -1 until chosen on first run
+  bool readerHintShown = false;
 } settings;
 
 // chat list
@@ -100,12 +101,13 @@ static void invalidate(bool full = false) {
 static void saveSettings() {
   FILE *f = fopen((gDataDir + "/settings.txt").c_str(), "w");
   if (!f) return;
-  fprintf(f, "lang=%d\n", settings.lang);
+  fprintf(f, "lang=%d\nreaderHint=%d\n", settings.lang, settings.readerHintShown ? 1 : 0);
   fclose(f);
 }
 
 static void loadSettings() {
   std::string s = util::readFile(gDataDir + "/settings.txt");
+  if (s.find("readerHint=1") != std::string::npos) settings.readerHintShown = true;
   size_t p = s.find("lang=");
   if (p != std::string::npos) settings.lang = atoi(s.c_str() + p + 5);
   if (settings.lang < -1 || settings.lang > 2) settings.lang = -1;
@@ -909,9 +911,81 @@ static void endSearch() {
   invalidate(true);
 }
 
+// ---------- avatars ----------
+struct CachedAvatar {
+  int32_t fileId;
+  int d;
+  ibitmap *bmp;
+};
+static std::list<CachedAvatar> avatarCache;
+static std::set<int32_t> avatarRequested;
+
+static ibitmap *avatarBitmap(const td_api::file &f, int d) {
+  for (auto it = avatarCache.begin(); it != avatarCache.end(); ++it)
+    if (it->fileId == f.id_ && it->d == d) {
+      avatarCache.splice(avatarCache.begin(), avatarCache, it);
+      return it->bmp;
+    }
+  ibitmap *src = LoadImageToFormat(f.local_->path_.c_str(), kFmtGrayscale8);
+  if (!src) return nullptr;
+  ibitmap *bmp = BitmapStretchProportionally(src, d, d);
+  if (bmp) free(src);
+  else bmp = src;
+  avatarCache.push_front({f.id_, d, bmp});
+  while (avatarCache.size() > 40) {
+    free(avatarCache.back().bmp);
+    avatarCache.pop_back();
+  }
+  return bmp;
+}
+
+// Paints everything outside the circle inscribed in the square white.
+static void circleMask(int x, int y, int d) {
+  double r = d / 2.0;
+  for (int j = 0; j < d; j++) {
+    double dy = j + 0.5 - r;
+    int hw = static_cast<int>(std::sqrt(std::max(0.0, r * r - dy * dy)) + 0.5);
+    int left = static_cast<int>(r) - hw;
+    if (left > 0) {
+      FillArea(x, y + j, left, 1, WHITE);
+      FillArea(x + d - left, y + j, left, 1, WHITE);
+    }
+  }
+}
+
+static int avatarSize() { return lineH(fBold) + lineH(fSmall) + FS / 6; }
+
+static void drawAvatar(const td_api::chat &c, int x, int y, int d) {
+  if (c.photo_ && c.photo_->small_) {
+    auto f = tg.file(c.photo_->small_.get());
+    if (Tg::done(f)) {
+      if (ibitmap *b = avatarBitmap(*f, d)) {
+        DrawBitmap(x + (d - b->width) / 2, y + (d - b->height) / 2, b);
+        circleMask(x, y, d);
+        return;
+      }
+    } else if (f && !Tg::downloading(f) && !avatarRequested.count(f->id_)) {
+      avatarRequested.insert(f->id_);
+      tg.download(f->id_, 1);
+    }
+  }
+  // no photo (yet): first letter on a grey circle
+  fillRound(x, y, d, d, d / 2, LGRAY);
+  std::string t = util::clean(c.id_ == tg.myId ? std::string(tr(S_SAVED)) : c.title_, true);
+  size_t i = 0;
+  std::string first;
+  if (!t.empty()) {
+    util::decode(t, i);
+    first = t.substr(0, i);
+  }
+  text(fBig, BLACK, x, y, d, d, first, ALIGN_CENTER | VALIGN_MIDDLE);
+}
+
 static void drawChatRow(const td_api::chat &c, int y) {
   int pad = FS / 2, rh = rowH();
-  int x = pad, w = W - pad - rightPad();
+  int ad = avatarSize();
+  drawAvatar(c, pad, y + (rh - ad) / 2, ad);
+  int x = pad + ad + pad, w = W - x - rightPad();
   std::string date = c.last_message_ ? util::shortDate(c.last_message_->date_) : "";
   int dw = date.empty() ? 0 : textW(fSmall, date) + pad;
   int y1 = y + FS / 3;
@@ -948,7 +1022,7 @@ static void drawChatRow(const td_api::chat &c, int y) {
     bw += pad;
   }
   line1(fSmall, DGRAY, x, y2, w - bw, prev);
-  FillArea(pad, y + rh - 1, W - pad - rightPad(), 1, LGRAY);
+  FillArea(x, y + rh - 1, W - x - rightPad(), 1, LGRAY);
   addHit(0, y, W, rh, H_CHAT, c.id_);
 }
 
@@ -1565,17 +1639,28 @@ static void composeMessage() {
 }
 
 // ---------- files: save & open ----------
+static void openInReader(const std::string &path) { OpenBook(path.c_str(), "", OB_WITHRETURN); }
+
+// Files open in the firmware's reader, which has no visible back arrow; the first time, explain the way back.
 static void openPath(const std::string &path) {
   std::string ext = util::extOf(path);
-  if (util::isImageExt(ext)) {
-    OpenBook(path.c_str(), "", OB_WITHRETURN);
+  if (!util::isImageExt(ext) && !util::isBookExt(ext)) {
+    toast(tr(S_NOT_SUPPORTED_FILE), 4000);
     return;
   }
-  if (util::isBookExt(ext)) {
-    OpenBook(path.c_str(), "", OB_WITHRETURN);
+  if (settings.readerHintShown) {
+    openInReader(path);
     return;
   }
-  toast(tr(S_NOT_SUPPORTED_FILE), 4000);
+  settings.readerHintShown = true;
+  saveSettings();
+  static std::string pending;
+  pending = path;
+  modalOpen = true;
+  Dialog(ICON_INFORMATION, APP_NAME, tr(S_READER_HINT), "OK", nullptr, [](int) {
+    modalOpen = false;
+    openInReader(pending);
+  });
 }
 
 // Copies a finished TDLib download into Downloads/Teleink.
@@ -1915,9 +2000,20 @@ static void pollTimer() {
   }
 
   switch (scr) {
-    case Scr::Chats:
+    case Scr::Chats: {
       if (tg.dirtyChats) invalidate();
+      // avatars arrive one by one: refresh for them at most every 2 s to spare the e-ink screen
+      static long long lastAvatarDraw = 0;
+      static bool avatarPending = false;
+      for (auto id : tg.dirtyFiles)
+        if (avatarRequested.count(id)) avatarPending = true;
+      if (avatarPending && nowMs() - lastAvatarDraw > 2000) {
+        avatarPending = false;
+        lastAvatarDraw = nowMs();
+        invalidate();
+      }
       break;
+    }
     case Scr::Found:
       if (tg.dirtyChats) invalidate();
       break;
