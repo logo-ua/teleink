@@ -994,7 +994,9 @@ static void openMenu(const std::string &header, const std::vector<std::pair<std:
   menuStrings.clear();
   menuActions.clear();
   menuItems.clear();
-  menuStrings.push_back(header);
+  // the firmware draws the title in capitals next to its close button and does not cut it,
+  // so keep it short enough never to reach the button
+  menuStrings.push_back(util::truncate(util::clean(header, true), 14));
   for (auto &it : items) menuStrings.push_back(it.first);
   menuItems.push_back({ITEM_HEADER, 0, const_cast<char *>(menuStrings[0].c_str()), nullptr});
   for (size_t i = 0; i < items.size(); i++) {
@@ -1577,7 +1579,9 @@ static void onFileDone(const td_api::file &f) {
       modalOpen = true;
       static std::string pending;
       pending = path;
-      Dialog(ICON_QUESTION, shortName.c_str(), tr(S_OPEN), tr(S_YES), tr(S_NO), [](int b) {
+      static std::string dialogTitle;
+      dialogTitle = util::truncate(shortName, 20);
+      Dialog(ICON_QUESTION, dialogTitle.c_str(), tr(S_OPEN), tr(S_YES), tr(S_NO), [](int b) {
         modalOpen = false;
         if (b == 1) openPath(pending);
         invalidate(true);
