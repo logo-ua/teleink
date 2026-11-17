@@ -34,7 +34,7 @@ Embed keys: `TG_API_ID=… TG_API_HASH=… scripts/build.sh`, or add `TG_API_ID`
 
 ## License
 
-[MIT](LICENSE) · [third-party notices](THIRD_PARTY_NOTICES.md) · Telegram is a trademark of Telegram FZ-LLC.
+Made by [LOGO.UA](https://logo.ua) · [MIT](LICENSE) · [third-party notices](THIRD_PARTY_NOTICES.md) · Telegram is a trademark of Telegram FZ-LLC.
 
 ---
 
