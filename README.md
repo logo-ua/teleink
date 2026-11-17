@@ -19,7 +19,7 @@ No built-in API keys? Get `api_id` and `api_hash` at [my.telegram.org](https://m
 
 ## Features
 
-Chats, folders, archive, search · photos · file downloads to `Downloads/Teleink` (books open in the reader) · sending files · notifications while open · English, Українська, Русский.
+Chats only, nothing else: read and write, files (download to `Downloads/Teleink`, books and photos open in the reader, send from the reader) · English, Українська, Русский.
 
 ## Build
 

@@ -20,28 +20,21 @@ static Tg tg;
 
 static const char *APP_DIR_REL = "/system/teleink";  // under FLASHDIR
 static const char *APP_NAME = "Teleink";
-static const char *APP_VERSION = "1.0";
 static std::string gDataDir;
 static std::string gDownloadDir;
 
 static int W = 758, H = 1024, FS = 26;
 static ifont *fReg, *fBold, *fSmall, *fSmallBold, *fBig, *fTiny, *fHuge;
 
-enum class Scr { Login, Chats, Chat, Photo, Files };
+enum class Scr { Login, Chats, Chat, Files };
 static Scr scr = Scr::Login;
 
 struct Settings {
-  bool notify = true;
-  bool autoPhotos = true;
   int lang = -1;  // -1 until chosen on first run
 } settings;
 
 // chat list
-static std::string listKey = "main";
 static int listPage = 0;
-static bool searchMode = false;
-static std::string searchQuery;
-static std::vector<int64_t> searchResults;
 
 // open chat
 static int64_t bottomMsgId = 0;  // 0 = stick to the newest message
@@ -52,11 +45,6 @@ static bool tallShown = false;
 static bool topPartial = false;  // the top message on screen is cut off
 static int64_t replyTo = 0;
 static std::set<int64_t> viewedIds;
-
-// photo viewer
-static int64_t photoMsgId = 0;
-static int32_t photoFileId = 0;
-static Scr photoReturn = Scr::Chat;
 
 // file picker
 static std::string pickDir = "/mnt/ext1";
@@ -112,14 +100,12 @@ static void invalidate(bool full = false) {
 static void saveSettings() {
   FILE *f = fopen((gDataDir + "/settings.txt").c_str(), "w");
   if (!f) return;
-  fprintf(f, "notify=%d\nautoPhotos=%d\nlang=%d\n", settings.notify ? 1 : 0, settings.autoPhotos ? 1 : 0, settings.lang);
+  fprintf(f, "lang=%d\n", settings.lang);
   fclose(f);
 }
 
 static void loadSettings() {
   std::string s = util::readFile(gDataDir + "/settings.txt");
-  if (s.find("notify=0") != std::string::npos) settings.notify = false;
-  if (s.find("autoPhotos=0") != std::string::npos) settings.autoPhotos = false;
   size_t p = s.find("lang=");
   if (p != std::string::npos) settings.lang = atoi(s.c_str() + p + 5);
   if (settings.lang < -1 || settings.lang > 2) settings.lang = -1;
@@ -195,8 +181,8 @@ struct Hit {
   int64_t a, b;
 };
 enum {
-  H_BACK = 1, H_MENU, H_PREV, H_NEXT, H_CHAT, H_MSG, H_PHOTO, H_FILE, H_INPUT, H_REPLY_CANCEL,
-  H_LOGIN1, H_LOGIN2, H_SAVE, H_PICK, H_ATTACH, H_SPONSORED, H_LANG
+  H_BACK = 1, H_MENU, H_PREV, H_NEXT, H_CHAT, H_MSG, H_FILE, H_INPUT, H_REPLY_CANCEL,
+  H_LOGIN1, H_PICK, H_ATTACH, H_SPONSORED, H_LANG
 };
 static std::vector<Hit> hits;
 
@@ -311,46 +297,6 @@ static void toast(const std::string &s, int ms = 4000) {
   invalidate();
 }
 
-// ---------- bitmap cache ----------
-struct CachedBmp {
-  int32_t fileId;
-  int w, h;
-  ibitmap *bmp;
-};
-static std::list<CachedBmp> bmpCache;
-
-static ibitmap *loadScaled(int32_t fileId, const std::string &path, int w, int h) {
-  for (auto it = bmpCache.begin(); it != bmpCache.end(); ++it) {
-    if (it->fileId == fileId && it->w == w && it->h == h) {
-      bmpCache.splice(bmpCache.begin(), bmpCache, it);
-      return it->bmp;
-    }
-  }
-  ibitmap *orig = LoadImageToFormat(path.c_str(), kFmtGrayscale8);
-  if (!orig) orig = LoadJPEG(path.c_str(), w, h, 100, 100, 1);
-  if (!orig) {
-    util::log("cannot load image %s", path.c_str());
-    return nullptr;
-  }
-  ibitmap *scaled = orig;
-  if (orig->width != w || orig->height != h) {
-    scaled = BitmapStretchProportionally(orig, w, h);
-    if (scaled) free(orig);
-    else scaled = orig;
-  }
-  bmpCache.push_front({fileId, w, h, scaled});
-  while (bmpCache.size() > 16) {
-    free(bmpCache.back().bmp);
-    bmpCache.pop_back();
-  }
-  return scaled;
-}
-
-static void clearBitmaps() {
-  for (auto &c : bmpCache) free(c.bmp);
-  bmpCache.clear();
-}
-
 // ======================================================================
 // message content
 // ======================================================================
@@ -358,26 +304,12 @@ static void clearBitmaps() {
 struct Media {
   int kind = 0;  // 0 none, 1 photo, 2 file
   const td_api::file *file = nullptr;  // as embedded in the message
-  int pw = 0, ph = 0;                  // photo size
   std::string title, sub, name, label;
   int64_t size = 0;
 };
 
 static std::string formatted(const object_ptr<td_api::formattedText> &t) {
   return t ? t->text_ : std::string();
-}
-
-// Picks the photo size best suited for width w.
-static const td_api::photoSize *pickPhoto(const td_api::photo &p, int w) {
-  const td_api::photoSize *best = nullptr;
-  for (auto &s : p.sizes_) {
-    if (!s || !s->photo_) continue;
-    if (!best) { best = s.get(); continue; }
-    bool bestOk = best->width_ >= w, sOk = s->width_ >= w;
-    if (sOk && (!bestOk || s->width_ < best->width_)) best = s.get();
-    else if (!sOk && !bestOk && s->width_ > best->width_) best = s.get();
-  }
-  return best;
 }
 
 static const td_api::photoSize *largestPhoto(const td_api::photo &p) {
@@ -409,12 +341,10 @@ static std::string contentText(const td_api::MessageContent *c, Media *media, bo
     case td_api::messagePhoto::ID: {
       auto p = static_cast<const td_api::messagePhoto *>(c);
       if (media && p->photo_) {
-        auto s = pickPhoto(*p->photo_, photoWidth);
-        if (s) {
-          media->kind = 1;
-          media->file = s->photo_.get();
-          media->pw = s->width_;
-          media->ph = s->height_;
+        // photos are handled like any other file: download, then open in the reader's gallery
+        if (auto s = largestPhoto(*p->photo_)) {
+          fileMedia(*media, s->photo_.get(), tr(S_PHOTO), "photo_" + std::to_string(s->photo_->id_) + ".jpg", "");
+          media->label = "JPG";
         }
       }
       std::string cap = formatted(p->caption_);
@@ -799,19 +729,7 @@ static void chooseLanguage(int l) {
 static int rowH() { return lineH(fBold) + lineH(fSmall) + FS * 2 / 3 + FS / 3; }
 static int rowsPerPage() { return std::max(1, (H - headerH() - footerH()) / rowH()); }
 
-static std::string listTitle() {
-  if (searchMode) return searchQuery;
-  if (listKey == "main") return tr(S_CHATS);
-  if (listKey == "archive") return tr(S_ARCHIVE);
-  for (auto &f : tg.folders)
-    if ("f" + std::to_string(f.id) == listKey) return f.name;
-  return tr(S_CHATS);
-}
-
-static std::vector<int64_t> currentChatIds() {
-  if (searchMode) return searchResults;
-  return tg.chatIds(listKey);
-}
+static std::vector<int64_t> currentChatIds() { return tg.chatIds("main"); }
 
 static void drawChatRow(const td_api::chat &c, int y) {
   int pad = FS / 2, rh = rowH();
@@ -862,7 +780,7 @@ static void drawChats() {
   auto ids = currentChatIds();
   int per = rowsPerPage();
   int pages = std::max(1, static_cast<int>((ids.size() + per - 1) / per));
-  if (!searchMode && !tg.listComplete[listKey]) pages = std::max(pages, listPage + 2);
+  if (!tg.listComplete["main"]) pages = std::max(pages, listPage + 2);
   if (listPage >= pages) listPage = pages - 1;
   int y = headerH();
   size_t start = static_cast<size_t>(listPage) * per;
@@ -873,12 +791,12 @@ static void drawChats() {
     y += rowH();
   }
   if (ids.empty()) {
-    std::string msg = (searchMode || tg.listComplete[listKey]) ? tr(S_NOTHING) : "…";
+    std::string msg = tg.listComplete["main"] ? tr(S_NOTHING) : "…";
     text(fReg, DGRAY, 0, H / 3, W, FS * 3, msg, ALIGN_CENTER | VALIGN_MIDDLE);
   }
   // load more when the user reaches the end of what is known
-  if (!searchMode && start + per * 2 >= ids.size()) tg.loadChats(listKey, 60);
-  drawHeader(listTitle(), searchMode || listKey != "main", MENU_ICON);
+  if (start + per * 2 >= ids.size()) tg.loadChats("main", 60);
+  drawHeader(tr(S_CHATS), false, MENU_ICON);
   drawPager(listPage, pages);
 }
 
@@ -917,50 +835,6 @@ static void setScreen(Scr s) {
   invalidate(true);
 }
 
-static void onSearch(char *t) {
-  modalOpen = false;
-  if (!t || util::trim(t).empty()) { invalidate(true); return; }
-  searchQuery = util::trim(t);
-  searchMode = true;
-  searchResults.clear();
-  listPage = 0;
-  auto add = [](object_ptr<td_api::Object> o) {
-    if (o->get_id() == td_api::chats::ID) {
-      for (auto id : static_cast<td_api::chats &>(*o).chat_ids_)
-        if (std::find(searchResults.begin(), searchResults.end(), id) == searchResults.end()) searchResults.push_back(id);
-    } else if (o->get_id() == td_api::chat::ID) {
-      int64_t id = static_cast<td_api::chat &>(*o).id_;
-      if (std::find(searchResults.begin(), searchResults.end(), id) == searchResults.end())
-        searchResults.insert(searchResults.begin(), id);
-    }
-    invalidate();
-  };
-  if (searchQuery[0] == '@') {
-    tg.send(make_object<td_api::searchPublicChat>(searchQuery.substr(1)), add);
-  } else {
-    auto f = make_object<td_api::searchChats>();
-    f->query_ = searchQuery;
-    f->limit_ = 50;
-    tg.send(std::move(f), add);
-    auto g = make_object<td_api::searchChatsOnServer>();
-    g->query_ = searchQuery;
-    g->limit_ = 50;
-    tg.send(std::move(g), add);
-    auto p = make_object<td_api::searchPublicChats>();
-    p->query_ = searchQuery;
-    tg.send(std::move(p), add);
-  }
-  invalidate(true);
-}
-
-static void showList(const std::string &key) {
-  listKey = key;
-  listPage = 0;
-  searchMode = false;
-  tg.loadChats(key, 60);
-  invalidate(true);
-}
-
 static void confirmLogout() {
   modalOpen = true;
   Dialog(ICON_QUESTION, APP_NAME, tr(S_LOG_OUT_Q), tr(S_YES), tr(S_NO),
@@ -977,41 +851,13 @@ static void confirmLogout() {
 static void quitApp();
 void openChatScreen(int64_t chatId);
 
-static void showAbout() {
-  static std::string text;
-  text = std::string(APP_NAME) + " " + APP_VERSION + "\n\n" + tr(S_ABOUT_TEXT);
-  Message(ICON_INFORMATION, APP_NAME, text.c_str(), 15000);
-}
-
-static std::string check(bool on, Str label) { return std::string(on ? "√  " : "     ") + tr(label); }
-
 static void chatsMenu() {
   std::vector<std::pair<std::string, std::function<void()>>> items;
-  items.push_back({tr(S_SEARCH), [] {
-                     kbuf[0] = 0;
-                     modalOpen = true;
-                     OpenKeyboard(tr(S_SEARCH), kbuf, 128, KBD_NORMAL, onSearch);
-                   }});
-  if (listKey != "main" || searchMode) items.push_back({tr(S_ALL_CHATS), [] { showList("main"); }});
-  for (auto &f : tg.folders) {
-    std::string key = "f" + std::to_string(f.id);
-    if (key != listKey) items.push_back({f.name, [key] { showList(key); }});
-  }
-  if (listKey != "archive") items.push_back({tr(S_ARCHIVE), [] { showList("archive"); }});
-  items.push_back({check(settings.notify, S_NOTIFICATIONS), [] {
-                     settings.notify = !settings.notify;
-                     saveSettings();
-                   }});
-  items.push_back({check(settings.autoPhotos, S_AUTO_PHOTOS), [] {
-                     settings.autoPhotos = !settings.autoPhotos;
-                     saveSettings();
-                   }});
   items.push_back({std::string("◄ ") + tr(S_LANGUAGE) + " ►", [] {
                      chooseLanguage((settings.lang + 1) % 3);
                      tg.connection = tg.connection.empty() ? "" : tr(S_CONNECTING);
                    }});
   items.push_back({tr(S_REFRESH), [] { invalidate(true); }});
-  items.push_back({tr(S_ABOUT), [] { showAbout(); }});
   items.push_back({tr(S_LOG_OUT), [] { confirmLogout(); }});
   items.push_back({tr(S_QUIT), [] { quitApp(); }});
   openMenu(APP_NAME, items);
@@ -1023,30 +869,6 @@ static void chatContextMenu(int64_t chatId) {
   std::vector<std::pair<std::string, std::function<void()>>> items;
   items.push_back({tr(S_OPEN), [chatId] { openChatScreen(chatId); }});
   items.push_back({tr(S_MARK_READ), [chatId] { tg.markChatRead(chatId); }});
-  bool muted = tg.isMuted(*c);
-  items.push_back({tr(muted ? S_UNMUTE : S_MUTE), [chatId, muted] {
-                     auto ch = tg.chat(chatId);
-                     if (!ch || !ch->notification_settings_) return;
-                     auto ns = make_object<td_api::chatNotificationSettings>();
-                     auto &old = *ch->notification_settings_;
-                     ns->use_default_mute_for_ = false;
-                     ns->mute_for_ = muted ? 0 : 366 * 24 * 3600;
-                     ns->use_default_sound_ = old.use_default_sound_;
-                     ns->sound_id_ = old.sound_id_;
-                     ns->use_default_show_preview_ = old.use_default_show_preview_;
-                     ns->show_preview_ = old.show_preview_;
-                     ns->use_default_mute_stories_ = old.use_default_mute_stories_;
-                     ns->mute_stories_ = old.mute_stories_;
-                     ns->use_default_story_sound_ = old.use_default_story_sound_;
-                     ns->story_sound_id_ = old.story_sound_id_;
-                     ns->use_default_show_story_poster_ = old.use_default_show_story_poster_;
-                     ns->show_story_poster_ = old.show_story_poster_;
-                     ns->use_default_disable_pinned_message_notifications_ = old.use_default_disable_pinned_message_notifications_;
-                     ns->disable_pinned_message_notifications_ = old.disable_pinned_message_notifications_;
-                     ns->use_default_disable_mention_notifications_ = old.use_default_disable_mention_notifications_;
-                     ns->disable_mention_notifications_ = old.disable_mention_notifications_;
-                     tg.send(make_object<td_api::setChatNotificationSettings>(chatId, std::move(ns)));
-                   }});
   openMenu(util::truncate(util::clean(c->title_, true), 40), items);
 }
 
@@ -1066,13 +888,11 @@ void openChatScreen(int64_t chatId) {
   tallOffset = 0;
   replyTo = 0;
   viewedIds.clear();
-  clearBitmaps();
   setScreen(Scr::Chat);
 }
 
 static void closeChatScreen() {
   tg.closeChat();
-  clearBitmaps();
   replyTo = 0;
   setScreen(Scr::Chats);
 }
@@ -1153,7 +973,7 @@ static std::string fileStatus(const td_api::file *f, int64_t size, int32_t fileI
 }
 
 // Lays out one message. With draw=false only measures. Returns height including spacing.
-static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int y, std::vector<int32_t> *wantPhotos) {
+static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int y) {
   int pad = FS / 2, gap = FS / 2;
   int total = 0;
   auto chat = tg.chat(m.chat_id_);
@@ -1231,20 +1051,7 @@ static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int 
   int hSender = sender.empty() ? 0 : lineH(fSmallBold);
   int hFwd = fwd.empty() ? 0 : textH(fSmall, cw, fwd);
   int hReply = reply.empty() ? 0 : std::min(textH(fSmall, cw - pad, reply), lineH(fSmall) * 2) + FS / 4;
-  int mediaW = 0, mediaH = 0;
-  if (media.kind == 1) {
-    int pw = std::max(media.pw, 1), ph = std::max(media.ph, 1);
-    mediaW = cw;
-    mediaH = mediaW * ph / pw;
-    int maxH = (msgBottom() - msgTop()) * 45 / 100;
-    if (mediaH > maxH) {
-      mediaH = maxH;
-      mediaW = std::max(1, mediaH * pw / ph);
-    }
-  } else if (media.kind == 2) {
-    mediaW = cw;
-    mediaH = lineH(fSmallBold) + lineH(fTiny) * 2 + FS / 3;
-  }
+  int mediaH = media.kind == 2 ? lineH(fSmallBold) + lineH(fTiny) * 2 + FS / 3 : 0;
   int hBody = body.empty() ? 0 : textH(fReg, cw, body);
   int hFoot = lineH(fTiny);
   int inner = hSender + hFwd + hReply + (mediaH ? mediaH + FS / 4 : 0) + hBody + hFoot + FS / 6;
@@ -1273,26 +1080,7 @@ static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int 
       text(fSmall, DGRAY, cx + pad, cy, cw - pad, hReply - FS / 4, reply, ALIGN_LEFT | VALIGN_TOP | DOTS);
       cy += hReply;
     }
-    if (media.kind == 1) {
-      auto f = tg.file(media.file);
-      int mx = cx + (cw - mediaW) / 2;
-      bool shown = false;
-      if (Tg::done(f)) {
-        ibitmap *b = loadScaled(f->id_, f->local_->path_, mediaW, mediaH);
-        if (b) {
-          DrawBitmap(mx + (mediaW - b->width) / 2, cy + (mediaH - b->height) / 2, b);
-          shown = true;
-        }
-      }
-      if (!shown) {
-        FillArea(mx, cy, mediaW, mediaH, LGRAY);
-        std::string lbl = Tg::downloading(f) ? "…" : "↓";
-        text(fBig, BLACK, mx, cy, mediaW, mediaH, lbl, ALIGN_CENTER | VALIGN_MIDDLE);
-        if (f && !Tg::done(f) && settings.autoPhotos && wantPhotos) wantPhotos->push_back(f->id_);
-      }
-      addHit(mx, cy, mediaW, mediaH, H_PHOTO, m.id_, f ? f->id_ : 0);
-      cy += mediaH + FS / 4;
-    } else if (media.kind == 2) {
+    if (media.kind == 2) {
       auto f = tg.file(media.file);
       int iconS = mediaH - FS / 6;
       FillArea(cx, cy, iconS, iconS, BLACK);
@@ -1331,7 +1119,7 @@ static std::vector<Placed> placeFromBottom(const std::vector<int64_t> &order, si
   for (size_t k = bottom + 1; k-- > 0;) {
     auto m = tg.message(order[k]);
     if (!m) continue;
-    int h = layoutMessage(*m, prevDateOf(order, k), false, 0, nullptr);
+    int h = layoutMessage(*m, prevDateOf(order, k), false, 0);
     // the message that does not fit completely is shown cut off at the top
     y -= h;
     out.push_back({k, y, h});
@@ -1405,7 +1193,6 @@ static void drawChat() {
   if (sp) sponsorReserve = std::min(layoutSponsored(*sp, false, 0), (H - headerH() - inputH()) / 3);
   auto chat = tg.chat(tg.openChatId);
   auto order = msgOrder();
-  std::vector<int32_t> wantPhotos;
   std::vector<int64_t> toView;
 
   SetClip(0, msgTop(), W, msgBottom() - msgTop());
@@ -1430,7 +1217,7 @@ static void drawChat() {
     for (auto &p : placed) {
       auto m = tg.message(order[p.idx]);
       if (!m) continue;
-      layoutMessage(*m, prevDateOf(order, p.idx), true, p.y, &wantPhotos);
+      layoutMessage(*m, prevDateOf(order, p.idx), true, p.y);
       if (!m->is_outgoing_ && !viewedIds.count(m->id_)) {
         viewedIds.insert(m->id_);
         toView.push_back(m->id_);
@@ -1449,7 +1236,6 @@ static void drawChat() {
     tg.viewSponsored(sp->message_id_);
   }
 
-  for (auto id : wantPhotos) tg.download(id, 1);
   tg.viewMessages(toView);
 
   // header
@@ -1536,7 +1322,7 @@ static void chatNewer() {
   for (size_t k = bottom + 1; k < order.size(); k++) {
     auto m = tg.message(order[k]);
     if (!m) continue;
-    int h = layoutMessage(*m, prevDateOf(order, k), false, 0, nullptr);
+    int h = layoutMessage(*m, prevDateOf(order, k), false, 0);
     if (used + h > avail && last != bottom) break;
     used += h;
     last = k;
@@ -1654,59 +1440,6 @@ static void fileTapped(int64_t msgId, int32_t fileId) {
   invalidate();
 }
 
-// ---------- photo viewer ----------
-static const td_api::file *viewerFile() {
-  auto m = tg.message(photoMsgId);
-  if (!m || !m->content_ || m->content_->get_id() != td_api::messagePhoto::ID) return nullptr;
-  auto &p = static_cast<td_api::messagePhoto &>(*m->content_);
-  if (!p.photo_) return nullptr;
-  auto s = largestPhoto(*p.photo_);
-  return s ? tg.file(s->photo_.get()) : nullptr;
-}
-
-static void openPhoto(int64_t msgId) {
-  photoMsgId = msgId;
-  photoReturn = scr;
-  auto f = viewerFile();
-  if (!f) return;
-  photoFileId = f->id_;
-  if (!Tg::done(f)) tg.download(f->id_, 20);
-  setScreen(Scr::Photo);
-}
-
-static void drawPhoto() {
-  ClearScreen();
-  hits.clear();
-  auto f = viewerFile();
-  int top = headerH();
-  if (f && Tg::done(f)) {
-    ibitmap *b = loadScaled(f->id_, f->local_->path_, W, H - top);
-    if (b) DrawBitmap((W - b->width) / 2, top + (H - top - b->height) / 2, b);
-    else text(fReg, BLACK, 0, H / 2, W, FS * 2, tr(S_ERR_IMAGE), ALIGN_CENTER);
-  } else {
-    std::string s = "…";
-    if (f && f->local_ && f->size_ > 0)
-      s += " " + std::to_string(static_cast<int>(f->local_->downloaded_size_ * 100 / f->size_)) + "%";
-    text(fReg, BLACK, 0, H / 2, W, FS * 2, s, ALIGN_CENTER);
-  }
-  addHit(0, top, W, H - top, H_BACK);
-  drawHeader("", true, (f && Tg::done(f)) ? "↓" : "", H_SAVE);
-}
-
-static void savePhoto() {
-  auto f = viewerFile();
-  if (!f || !Tg::done(f)) return;
-  auto m = tg.message(photoMsgId);
-  time_t t = m ? m->date_ : time(nullptr);
-  struct tm tmv;
-  localtime_r(&t, &tmv);
-  char name[64];
-  snprintf(name, sizeof name, "photo_%04d-%02d-%02d_%02d%02d%02d.jpg", tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
-           tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
-  std::string p = exportFile(*f, name);
-  if (!p.empty()) toast(std::string(tr(S_SAVED_TO)) + ": " + p.substr(p.rfind('/') + 1));
-}
-
 // ---------- file picker (sending files) ----------
 static void readPickDir() {
   pickEntries.clear();
@@ -1803,7 +1536,6 @@ static void messageMenu(int64_t msgId) {
                    }});
   Media media;
   contentText(m->content_.get(), &media, nullptr, bubbleMaxW());
-  if (media.kind == 1) items.push_back({tr(S_OPEN), [msgId] { openPhoto(msgId); }});
   if (media.kind == 2 && media.file) {
     int32_t fid = media.file->id_;
     auto f = tg.file(media.file);
@@ -1844,7 +1576,6 @@ static void drawScreen() {
     case Scr::Login: drawLogin(); break;
     case Scr::Chats: drawChats(); break;
     case Scr::Chat: drawChat(); break;
-    case Scr::Photo: drawPhoto(); break;
     case Scr::Files: drawFiles(); break;
   }
   drawToast();
@@ -1884,7 +1615,6 @@ static void pollTimer() {
     if (tg.ready && scr == Scr::Login) {
       tg.lastError.clear();
       scr = Scr::Chats;
-      listKey = "main";
       listPage = 0;
       invalidate(true);
     } else if (!tg.ready && scr != Scr::Login) {
@@ -1903,9 +1633,6 @@ static void pollTimer() {
     case Scr::Chat:
       if (tg.dirtyMsgs) invalidate();
       if (!tg.dirtyFiles.empty()) invalidate();
-      break;
-    case Scr::Photo:
-      if (tg.dirtyFiles.count(photoFileId)) invalidate();
       break;
     default:
       break;
@@ -1937,18 +1664,6 @@ static void pollTimer() {
   SetHardTimer("tg_poll", pollTimer, 150);
 }
 
-static void onIncoming(const td_api::message &m) {
-  if (!settings.notify || !tg.ready) return;
-  if (m.chat_id_ == tg.openChatId && scr == Scr::Chat) return;
-  if (time(nullptr) - m.date_ > 120) return;  // history sync, not a new message
-  auto c = tg.chat(m.chat_id_);
-  if (!c || tg.isMuted(*c)) return;
-  if (c->notification_settings_ && c->notification_settings_->use_default_mute_for_ && tg.isChannel(*c)) return;
-  std::string who = util::clean(c->title_, true);
-  if (tg.isGroup(*c)) who = tg.senderName(m.sender_id_.get()) + " @ " + who;
-  toast(who + ": " + util::truncate(previewOf(&m), 120), 5000);
-}
-
 static void handleTap(int x, int y) {
   const Hit *hit = nullptr;
   for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
@@ -1975,7 +1690,6 @@ static void handleTap(int x, int y) {
       else if (h.kind == H_MENU) chatsMenu();
       else if (h.kind == H_PREV) { listPage = std::max(0, listPage - 1); invalidate(); }
       else if (h.kind == H_NEXT) { listPage++; invalidate(); }
-      else if (h.kind == H_BACK) showList("main");
       break;
     case Scr::Chat:
       if (h.kind == H_BACK) closeChatScreen();
@@ -1985,14 +1699,9 @@ static void handleTap(int x, int y) {
       else if (h.kind == H_REPLY_CANCEL) { replyTo = 0; invalidate(); }
       else if (h.kind == H_PREV) chatOlder();
       else if (h.kind == H_NEXT) chatNewer();
-      else if (h.kind == H_PHOTO) openPhoto(h.a);
       else if (h.kind == H_FILE) fileTapped(h.a, static_cast<int32_t>(h.b));
       else if (h.kind == H_MSG) messageMenu(h.a);
       else if (h.kind == H_SPONSORED) sponsoredTapped(h.a);
-      break;
-    case Scr::Photo:
-      if (h.kind == H_SAVE) savePhoto();
-      else if (h.kind == H_BACK) setScreen(photoReturn);
       break;
     case Scr::Files:
       if (h.kind == H_BACK) setScreen(Scr::Chat);
@@ -2012,7 +1721,7 @@ static void handleLongTap(int x, int y) {
   for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
     if (x >= it->x && x < it->x + it->w && y >= it->y && y < it->y + it->h) {
       if (scr == Scr::Chats && it->kind == H_CHAT) { chatContextMenu(it->a); return; }
-      if (scr == Scr::Chat && (it->kind == H_MSG || it->kind == H_PHOTO || it->kind == H_FILE)) { messageMenu(it->a); return; }
+      if (scr == Scr::Chat && (it->kind == H_MSG || it->kind == H_FILE)) { messageMenu(it->a); return; }
     }
   }
 }
@@ -2038,10 +1747,8 @@ static void pageForward() {
 static void goBack() {
   switch (scr) {
     case Scr::Chat: closeChatScreen(); break;
-    case Scr::Photo: setScreen(photoReturn); break;
     case Scr::Files: setScreen(Scr::Chat); break;
     case Scr::Chats:
-      if (searchMode || listKey != "main") showList("main");
       break;
     default: break;
   }
@@ -2083,9 +1790,8 @@ static int mainHandler(int type, int par1, int par2) {
       initFonts();
       loadSettings();
       loadCreds();
-      if (launcher::registerIcon(FLASHDIR)) toast(tr(S_ICON_RESTART), 8000);
+      if (launcher::registerIcon(FLASHDIR, ScreenWidth())) toast(tr(S_ICON_RESTART), 8000);
       tg.dataDir = gDataDir;
-      tg.onIncoming = onIncoming;
       tg.onFileDone = onFileDone;
       tg.onError = [](const std::string &e) {
         if (scr != Scr::Login) toast(e, 4000);
@@ -2137,7 +1843,7 @@ static int mainHandler(int type, int par1, int par2) {
         if (scr == Scr::Chat) { if (dy > 0) chatOlder(); else chatNewer(); }
         else { if (dy < 0) pageForward(); else pageBack(); }
       } else if (downX >= 0 && std::abs(dx) > W / 4 && std::abs(dx) > std::abs(dy)) {
-        if (scr == Scr::Chat || scr == Scr::Photo || scr == Scr::Files) { if (dx > 0) goBack(); }
+        if (scr == Scr::Chat || scr == Scr::Files) { if (dx > 0) goBack(); }
         else { if (dx < 0) pageForward(); else pageBack(); }
       } else {
         handleTap(par1, par2);
@@ -2176,8 +1882,7 @@ static int mainHandler(int type, int par1, int par2) {
         long long until = nowMs() + 3000;
         while (!tg.closed && nowMs() < until) tg.poll(0.2);
       }
-      clearBitmaps();
-      break;
+          break;
   }
   return 0;
 }

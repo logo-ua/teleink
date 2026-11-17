@@ -108,57 +108,112 @@ class JsonCheck {
   }
 };
 
-// Returns the patched text, or "" if the file does not look like what we expect.
-inline std::string patch(const std::string &json, const std::string &key, const std::string &appFile,
-                         const std::string &title, const std::string &icon, const std::string &iconFocused) {
-  if (json.find("\"" + key + "\"") != std::string::npos) return "";  // already registered
-  // 1. entry in "applications": { ... }
-  size_t a = json.find("\"applications\"");
-  if (a == std::string::npos) return "";
-  size_t brace = json.find('{', a);
-  size_t colon = json.find(':', a);
-  if (brace == std::string::npos || colon == std::string::npos || colon > brace) return "";
-  for (size_t k = colon + 1; k < brace; k++)
-    if (!isspace(static_cast<unsigned char>(json[k]))) return "";
-  size_t next = brace + 1;
-  while (next < json.size() && isspace(static_cast<unsigned char>(json[next]))) next++;
-  bool emptyObject = next < json.size() && json[next] == '}';
-  std::string entry = "\n        \"" + key + "\": {\n" +
-                      "            \"path\": \"applications/" + appFile + "\",\n" +
-                      "            \"title\": \"" + title + "\",\n" +
-                      "            \"icon\": { \"path\": \"applications/icons/" + icon + "\" },\n" +
-                      "            \"focused_icon\": { \"path\": \"applications/icons/" + iconFocused + "\" }\n" +
-                      "        }" + (emptyObject ? "" : ",");
-  std::string out = json.substr(0, brace + 1) + entry + json.substr(brace + 1);
+// End (index past the closing brace) of the JSON object starting at json[open] == '{'.
+inline size_t objectEnd(const std::string &json, size_t open) {
+  int depth = 0;
+  bool inStr = false;
+  for (size_t k = open; k < json.size(); k++) {
+    char c = json[k];
+    if (inStr) {
+      if (c == '\\') k++;
+      else if (c == '"') inStr = false;
+    } else if (c == '"') {
+      inStr = true;
+    } else if (c == '{') {
+      depth++;
+    } else if (c == '}') {
+      if (--depth == 0) return k + 1;
+    }
+  }
+  return std::string::npos;
+}
 
-  // 2. listed in the first group ("@General" on stock firmware) so it shows with the icon
-  size_t g = out.find("\"groups\"");
-  if (g != std::string::npos) {
-    size_t apps = out.find("\"apps\"", g);
-    size_t bracket = apps == std::string::npos ? std::string::npos : out.find('[', apps);
-    if (bracket != std::string::npos) {
-      size_t n2 = bracket + 1;
-      while (n2 < out.size() && isspace(static_cast<unsigned char>(out[n2]))) n2++;
-      bool emptyArray = n2 < out.size() && out[n2] == ']';
-      out = out.substr(0, bracket + 1) + "\n                    \"" + key + "\"" + (emptyArray ? "" : ",") +
-            out.substr(bracket + 1);
+inline std::string entryBody(const std::string &appPath, const std::string &title, const std::string &icon) {
+  return "{\n"
+         "            \"path\": \"" + appPath + "\",\n"
+         "            \"title\": \"" + title + "\",\n"
+         "            \"icon\": { \"path\": \"" + icon + "\" },\n"
+         "            \"focused_icon\": { \"path\": \"" + icon + "\" }\n"
+         "        }";
+}
+
+// Returns the patched text, or "" when nothing needs to change or the file looks unfamiliar.
+inline std::string patch(const std::string &json, const std::string &key, const std::string &appPath,
+                         const std::string &title, const std::string &icon) {
+  std::string body = entryBody(appPath, title, icon);
+  std::string out;
+  size_t existing = json.find("\"" + key + "\"");
+  if (existing != std::string::npos) {
+    // already registered: refresh the entry if it differs (older builds used other paths)
+    size_t open = json.find('{', existing);
+    size_t colon = json.find(':', existing);
+    if (open == std::string::npos || colon == std::string::npos || colon > open) return "";
+    size_t close = objectEnd(json, open);
+    if (close == std::string::npos) return "";
+    if (json.compare(open, close - open, body) == 0) return "";
+    out = json.substr(0, open) + body + json.substr(close);
+  } else {
+    // 1. entry in "applications": { ... }
+    size_t a = json.find("\"applications\"");
+    if (a == std::string::npos) return "";
+    size_t brace = json.find('{', a);
+    size_t colon = json.find(':', a);
+    if (brace == std::string::npos || colon == std::string::npos || colon > brace) return "";
+    for (size_t k = colon + 1; k < brace; k++)
+      if (!isspace(static_cast<unsigned char>(json[k]))) return "";
+    size_t next = brace + 1;
+    while (next < json.size() && isspace(static_cast<unsigned char>(json[next]))) next++;
+    bool emptyObject = next < json.size() && json[next] == '}';
+    out = json.substr(0, brace + 1) + "\n        \"" + key + "\": " + body + (emptyObject ? "" : ",") +
+          json.substr(brace + 1);
+    // 2. listed in the first group ("@General" on stock firmware) so it shows with the icon
+    size_t g = out.find("\"groups\"");
+    if (g != std::string::npos) {
+      size_t apps = out.find("\"apps\"", g);
+      size_t bracket = apps == std::string::npos ? std::string::npos : out.find('[', apps);
+      if (bracket != std::string::npos) {
+        size_t n2 = bracket + 1;
+        while (n2 < out.size() && isspace(static_cast<unsigned char>(out[n2]))) n2++;
+        bool emptyArray = n2 < out.size() && out[n2] == ']';
+        out = out.substr(0, bracket + 1) + "\n                    \"" + key + "\"" + (emptyArray ? "" : ",") +
+              out.substr(bracket + 1);
+      }
     }
   }
   if (!JsonCheck(out).ok()) return "";
   return out;
 }
 
+// Icon size matching the stock icons for this screen width.
+inline int iconSize(int screenW) {
+  if (screenW <= 800) return 64;
+  if (screenW <= 1100) return 90;
+  if (screenW <= 1300) return 107;
+  return 118;
+}
+
+// macOS leaves "._name" metadata files when copying to the reader; the launcher shows
+// "._Teleink.app" as a broken app, so remove ours.
+inline void removeMacJunk(const std::string &root) {
+  const char *junk[] = {"/applications/._Teleink.app", "/applications/._icons", "/applications/icons/._teleink_64.bmp",
+                        "/applications/icons/._teleink_90.bmp", "/applications/icons/._teleink_107.bmp",
+                        "/applications/icons/._teleink_118.bmp", "/applications/icons/._teleink.bmp",
+                        "/applications/icons/._teleink_f.bmp"};
+  for (auto j : junk) unlink((root + j).c_str());
+}
+
 // Returns true if the file was changed (the launcher picks it up after a restart).
-inline bool registerIcon(const std::string &root) {
+inline bool registerIcon(const std::string &root, int screenW) {
+  removeMacJunk(root);
   std::string path = root + "/system/config/desktop/view.json";
-  std::string iconDir = root + "/applications/icons";
-  if (!util::exists(path) || !util::exists(iconDir + "/teleink.bmp")) return false;
+  std::string icon = "applications/icons/teleink_" + std::to_string(iconSize(screenW)) + ".bmp";
+  if (!util::exists(path) || !util::exists(root + "/" + icon)) return false;
   std::string json = util::readFile(path);
   if (json.empty() || !JsonCheck(json).ok()) {
     util::log("view.json: missing or not valid JSON, not touching it");
     return false;
   }
-  std::string out = patch(json, "U_Teleink", "Teleink.app", "Teleink", "teleink.bmp", "teleink_f.bmp");
+  std::string out = patch(json, "U_Teleink", root + "/applications/Teleink.app", "Teleink", icon);
   if (out.empty()) return false;
   std::string backup = path + ".teleink-backup";
   if (!util::exists(backup) && !util::copyFile(path, backup)) return false;
@@ -173,7 +228,7 @@ inline bool registerIcon(const std::string &root) {
     unlink(tmp.c_str());
     return false;
   }
-  util::log("view.json: registered launcher icon (backup in %s)", backup.c_str());
+  util::log("view.json: launcher entry updated (backup in %s)", backup.c_str());
   return true;
 }
 

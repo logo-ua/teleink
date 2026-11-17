@@ -137,7 +137,6 @@ int main(int argc, char **argv) {
             textMsg(200 + i, 1, 4, i % 3 == 0, now - 86400 * (i + 3), "Повідомлення " + std::to_string(i)), i % 4 == 0 ? i : 0);
   tg.listComplete["main"] = true;
   scr = Scr::Chats;
-  listKey = "main";
   shot("04_chats");
   listPage = 1;
   shot("05_chats_page2");
@@ -250,25 +249,6 @@ int main(int argc, char **argv) {
   tallOffset = 0;
   shot("08b_channel_sponsored");
   tg.sponsored.clear();
-
-  // --- photo viewer ---
-  tg.openChatId = 101;
-  tg.msgs.clear();
-  {
-    auto m = make_object<td_api::message>();
-    m->id_ = 5; m->chat_id_ = 101; m->date_ = now; m->sender_id_ = make_object<td_api::messageSenderUser>(4);
-    auto p = make_object<td_api::messagePhoto>();
-    p->photo_ = make_object<td_api::photo>();
-    auto sz = make_object<td_api::photoSize>();
-    sz->type_ = "y"; sz->width_ = 800; sz->height_ = 600;
-    sz->photo_ = mkfile(500, 120000, "/tmp/tgtest/photo.pgm", true);
-    p->photo_->sizes_.push_back(std::move(sz));
-    m->content_ = std::move(p);
-    tg.msgs[5] = std::move(m);
-  }
-  photoMsgId = 5;
-  scr = Scr::Photo;
-  shot("09_photo");
 
   // --- file picker ---
   pickDir = "/tmp/tgtest";
