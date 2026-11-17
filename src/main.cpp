@@ -849,6 +849,10 @@ static void onSearch(char *t) {
     server->query_ = q;
     server->limit_ = 50;
     tg.send(std::move(server), chats);
+    // public channels and groups you have not joined yet
+    auto pub = make_object<td_api::searchPublicChats>();
+    pub->query_ = q;
+    tg.send(std::move(pub), chats);
   }
   invalidate(true);
 }
