@@ -286,12 +286,18 @@ struct ScrollState {
   double frac = 0;  // 0 = top, 1 = bottom
 } sb;
 
-static int sbWidth() { return std::max(6, FS / 4); }
+static int sbWidth() { return std::max(12, FS * 55 / 100); }
+// Right margin for list and chat content so it never runs under the scrollbar.
+static int rightPad() { return sbWidth() + FS / 2; }
 static int sbX() { return W - sbWidth() - 3; }
 
-static void drawThumb(double frac, int w, int color = LGRAY) {
+static void drawThumb(double frac, int w, bool active = false) {
   int ty = sb.y + static_cast<int>((sb.h - sb.thumbH) * frac);
-  fillRound(W - w - 2, ty, w, sb.thumbH, w / 2, color);
+  int x = W - w - 3, r = w / 2;
+  // white pill with an outline; the outline gets heavier while it is dragged
+  int t = active ? 3 : 1;
+  fillRound(x, ty, w, sb.thumbH, r, active ? BLACK : DGRAY);
+  fillRound(x + t, ty + t, w - 2 * t, sb.thumbH - 2 * t, std::max(1, r - t), WHITE);
 }
 
 static void scrollbar(int y, int h, double start, double size) {
@@ -309,9 +315,9 @@ static void scrollbar(int y, int h, double start, double size) {
 static void dragScrollbar(int y) {
   double frac = (y - sb.y - sb.thumbH / 2.0) / std::max(1, sb.h - sb.thumbH);
   sb.frac = std::min(1.0, std::max(0.0, frac));
-  int stripW = sbWidth() + 4;
+  int stripW = sbWidth() + 6;
   FillArea(W - stripW, sb.y, stripW, sb.h, WHITE);
-  drawThumb(sb.frac, sbWidth(), DGRAY);
+  drawThumb(sb.frac, sbWidth(), true);
   DynamicUpdate(W - stripW, sb.y, stripW, sb.h);
 }
 
@@ -905,7 +911,7 @@ static void endSearch() {
 
 static void drawChatRow(const td_api::chat &c, int y) {
   int pad = FS / 2, rh = rowH();
-  int x = pad, w = W - 2 * pad;
+  int x = pad, w = W - pad - rightPad();
   std::string date = c.last_message_ ? util::shortDate(c.last_message_->date_) : "";
   int dw = date.empty() ? 0 : textW(fSmall, date) + pad;
   int y1 = y + FS / 3;
@@ -913,7 +919,7 @@ static void drawChatRow(const td_api::chat &c, int y) {
   if (c.id_ == tg.myId && tg.myId) title = tr(S_SAVED);
   if (tg.isChannel(c)) title = "» " + title;
   line1(fBold, BLACK, x, y1, w - dw, title);
-  if (!date.empty()) line1(fSmall, DGRAY, W - pad - dw, y1 + (lineH(fBold) - lineH(fSmall)) / 2, dw, date, ALIGN_RIGHT);
+  if (!date.empty()) line1(fSmall, DGRAY, W - rightPad() - dw, y1 + (lineH(fBold) - lineH(fSmall)) / 2, dw, date, ALIGN_RIGHT);
 
   int y2 = y1 + lineH(fBold) + FS / 6;
   std::string prev;
@@ -935,14 +941,14 @@ static void drawChatRow(const td_api::chat &c, int y) {
     if (c.unread_mention_count_ > 0) n = "@ " + n;
     int bh = lineH(fSmallBold);
     bw = std::max(textW(fSmallBold, n) + FS * 2 / 3, bh);
-    int bx = W - pad - bw;
+    int bx = W - rightPad() - bw;
     bool muted = tg.isMuted(c);
     fillRound(bx, y2, bw, bh, bh / 2, muted ? LGRAY : BLACK);
     text(fSmallBold, muted ? BLACK : WHITE, bx, y2, bw, bh, n, ALIGN_CENTER | VALIGN_MIDDLE);
     bw += pad;
   }
   line1(fSmall, DGRAY, x, y2, w - bw, prev);
-  FillArea(pad, y + rh - 1, W - 2 * pad, 1, LGRAY);
+  FillArea(pad, y + rh - 1, W - pad - rightPad(), 1, LGRAY);
   addHit(0, y, W, rh, H_CHAT, c.id_);
 }
 
@@ -1082,7 +1088,7 @@ static std::vector<int64_t> msgOrder() {
   return v;
 }
 
-static int bubbleMaxW() { return W * 82 / 100; }
+static int bubbleMaxW() { return (W - rightPad()) * 85 / 100; }
 
 static std::string replySnippet(const td_api::message &m) {
   if (!m.reply_to_ || m.reply_to_->get_id() != td_api::messageReplyToMessage::ID) return "";
@@ -1168,16 +1174,17 @@ static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int 
 
   bool service = false;
   Media media;
-  int maxW = channel ? W - 2 * pad : bubbleMaxW();
+  int maxW = channel ? W - pad - rightPad() : bubbleMaxW();
   int cwMax = maxW - 2 * pad;
   std::string body = util::clean(contentText(m.content_.get(), &media, &service, cwMax));
 
   if (service) {
     std::string who = m.is_outgoing_ ? tr(S_YOU) : tg.senderName(m.sender_id_.get());
     std::string s = who + " — " + body;
-    int sh = textH(fSmall, W - 4 * pad, s) + FS / 3;
+    int sw = W - 2 * pad - rightPad();
+    int sh = textH(fSmall, sw, s) + FS / 3;
     if (draw) {
-      text(fSmall, DGRAY, 2 * pad, y, W - 4 * pad, sh, s, ALIGN_CENTER | VALIGN_TOP);
+      text(fSmall, DGRAY, 2 * pad, y, sw, sh, s, ALIGN_CENTER | VALIGN_TOP);
       addHit(0, y, W, sh, H_MSG, m.id_);
     }
     return total + sh + gap;
@@ -1222,7 +1229,7 @@ static int layoutMessage(const td_api::message &m, int prevDate, bool draw, int 
     cw = std::min(need, cwMax);
   }
   int bw = cw + 2 * pad;
-  int bx = m.is_outgoing_ && !channel ? W - pad - bw : pad;
+  int bx = m.is_outgoing_ && !channel ? W - rightPad() - bw : pad;
   int cx = bx + pad;
 
   // measure parts
@@ -1314,7 +1321,7 @@ static size_t indexOf(const std::vector<int64_t> &order, int64_t id) {
 // Sponsored message shown under the newest channel post. Returns its height.
 static int layoutSponsored(const td_api::sponsoredMessage &sp, bool draw, int y) {
   int pad = FS / 2;
-  int bw = W - 2 * pad, cw = bw - 2 * pad;
+  int bw = W - pad - rightPad(), cw = bw - 2 * pad;
   std::string label = tr(sp.is_recommended_ ? S_RECOMMENDED : S_SPONSORED);
   std::string title = util::clean(sp.title_, true);
   std::string body = util::clean(contentText(sp.content_.get(), nullptr, nullptr, 0));
@@ -1775,10 +1782,10 @@ static void drawFound() {
     std::string date = util::shortDate(m.date_);
     int dw = textW(fSmall, date) + pad;
     int y1 = y + FS / 3;
-    line1(fBold, BLACK, pad, y1, W - 2 * pad - dw, who);
-    line1(fSmall, DGRAY, W - pad - dw, y1 + (lineH(fBold) - lineH(fSmall)) / 2, dw, date, ALIGN_RIGHT);
-    line1(fSmall, DGRAY, pad, y1 + lineH(fBold) + FS / 6, W - 2 * pad, previewOf(&m));
-    FillArea(pad, y + rh - 1, W - 2 * pad, 1, LGRAY);
+    line1(fBold, BLACK, pad, y1, W - pad - rightPad() - dw, who);
+    line1(fSmall, DGRAY, W - rightPad() - dw, y1 + (lineH(fBold) - lineH(fSmall)) / 2, dw, date, ALIGN_RIGHT);
+    line1(fSmall, DGRAY, pad, y1 + lineH(fBold) + FS / 6, W - pad - rightPad(), previewOf(&m));
+    FillArea(pad, y + rh - 1, W - pad - rightPad(), 1, LGRAY);
     addHit(0, y, W, rh, H_FOUND, m.id_);
     y += rh;
   }
