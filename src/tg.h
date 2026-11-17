@@ -493,6 +493,28 @@ class Tg {
     });
   }
 
+  // Deletes every downloaded file TDLib keeps (photos, documents, avatars); reports bytes freed.
+  void clearCache(std::function<void(int64_t)> done) {
+    send(make_object<td_api::getStorageStatisticsFast>(), [this, done](object_ptr<td_api::Object> o) {
+      int64_t before = o->get_id() == td_api::storageStatisticsFast::ID
+                           ? static_cast<td_api::storageStatisticsFast &>(*o).files_size_ : 0;
+      auto f = make_object<td_api::optimizeStorage>();
+      f->size_ = 0;
+      f->ttl_ = 0;
+      f->count_ = 0;
+      f->immunity_delay_ = 0;
+      f->return_deleted_file_statistics_ = false;
+      f->chat_limit_ = 0;
+      send(std::move(f), [this, before, done](object_ptr<td_api::Object>) {
+        send(make_object<td_api::getStorageStatisticsFast>(), [before, done](object_ptr<td_api::Object> o2) {
+          int64_t after = o2->get_id() == td_api::storageStatisticsFast::ID
+                              ? static_cast<td_api::storageStatisticsFast &>(*o2).files_size_ : 0;
+          done(std::max<int64_t>(0, before - after));
+        });
+      });
+    });
+  }
+
   void viewMessages(const std::vector<int64_t> &ids) {
     if (!openChatId || ids.empty()) return;
     auto f = make_object<td_api::viewMessages>();

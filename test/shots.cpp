@@ -296,6 +296,18 @@ int main(int argc, char **argv) {
   scr = Scr::Files;
   shot("10_files");
 
+  // --- notification for a new message in another chat ---
+  scr = Scr::Chats;
+  {
+    auto m = textMsg(100, 77, 2, false, static_cast<int>(time(nullptr)), "Ти вже вдома?");
+    onIncoming(*m);
+    printf("notification: %s\n", toastText.c_str());
+    settings.notify = false;
+    toastText.clear();
+    onIncoming(*m);
+    printf("notifications off -> empty: %d\n", toastText.empty() ? 1 : 0);
+    settings.notify = true;
+  }
   // --- toast over chat list ---
   scr = Scr::Chats;
   toast("Олена Коваль: Ти вже вдома?", 100000);

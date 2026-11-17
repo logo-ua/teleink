@@ -32,6 +32,7 @@ static Scr scr = Scr::Login;
 struct Settings {
   int lang = -1;  // -1 until chosen on first run
   bool readerHintShown = false;
+  bool notify = true;
 } settings;
 
 // chat list
@@ -101,13 +102,15 @@ static void invalidate(bool full = false) {
 static void saveSettings() {
   FILE *f = fopen((gDataDir + "/settings.txt").c_str(), "w");
   if (!f) return;
-  fprintf(f, "lang=%d\nreaderHint=%d\n", settings.lang, settings.readerHintShown ? 1 : 0);
+  fprintf(f, "lang=%d\nreaderHint=%d\nnotify=%d\n", settings.lang, settings.readerHintShown ? 1 : 0,
+          settings.notify ? 1 : 0);
   fclose(f);
 }
 
 static void loadSettings() {
   std::string s = util::readFile(gDataDir + "/settings.txt");
   if (s.find("readerHint=1") != std::string::npos) settings.readerHintShown = true;
+  if (s.find("notify=0") != std::string::npos) settings.notify = false;
   size_t p = s.find("lang=");
   if (p != std::string::npos) settings.lang = atoi(s.c_str() + p + 5);
   if (settings.lang < -1 || settings.lang > 2) settings.lang = -1;
@@ -1109,13 +1112,37 @@ static void confirmLogout() {
 static void quitApp();
 void openChatScreen(int64_t chatId);
 
+static void confirmClearCache() {
+  modalOpen = true;
+  Dialog(ICON_QUESTION, APP_NAME, tr(S_CLEAR_CACHE_Q), tr(S_YES), tr(S_NO), [](int b) {
+    modalOpen = false;
+    if (b == 1) {
+      ShowHourglass();
+      tg.clearCache([](int64_t freed) {
+        HideHourglass();
+        // drop decoded avatars so they are fetched again
+        for (auto &a : avatarCache) free(a.bmp);
+        avatarCache.clear();
+        avatarRequested.clear();
+        toast(std::string(tr(S_CACHE_FREED)) + ": " + util::fileSize(freed), 4000);
+        invalidate(true);
+      });
+    }
+    invalidate(true);
+  });
+}
+
 static void chatsMenu() {
   std::vector<std::pair<std::string, std::function<void()>>> items;
+  items.push_back({std::string(tr(S_NOTIFICATIONS)) + ": " + tr(settings.notify ? S_ON : S_OFF), [] {
+                     settings.notify = !settings.notify;
+                     saveSettings();
+                   }});
   items.push_back({std::string(tr(S_LANG_LABEL)) + ": " + tr(S_LANGUAGE), [] {
                      chooseLanguage((settings.lang + 1) % 3);
                      tg.connection = tg.connection.empty() ? "" : tr(S_CONNECTING);
                    }});
-  items.push_back({tr(S_REFRESH), [] { invalidate(true); }});
+  items.push_back({tr(S_CLEAR_CACHE), [] { confirmClearCache(); }});
   items.push_back({tr(S_LOG_OUT), [] { confirmLogout(); }});
   items.push_back({tr(S_QUIT), [] { quitApp(); }});
   openMenu(APP_NAME, items);
@@ -2076,6 +2103,20 @@ static void scrollTo(double frac) {
 
 static void foundTap(const Hit &h);
 
+// New message from another chat while Teleink is open: a short banner at the top.
+static void onIncoming(const td_api::message &m) {
+  if (!settings.notify || !tg.ready || scr == Scr::Login) return;
+  if (m.chat_id_ == tg.openChatId && scr == Scr::Chat) return;
+  if (time(nullptr) - m.date_ > 120) return;  // history catching up, not a new message
+  auto c = tg.chat(m.chat_id_);
+  if (!c || tg.isMuted(*c)) return;
+  // channels notify only when explicitly unmuted
+  if (tg.isChannel(*c) && (!c->notification_settings_ || c->notification_settings_->use_default_mute_for_)) return;
+  std::string who = util::clean(c->title_, true);
+  if (tg.isGroup(*c)) who = tg.senderName(m.sender_id_.get()) + " · " + who;
+  toast(who + ": " + util::truncate(previewOf(&m), 100), 5000);
+}
+
 static void handleTap(int x, int y) {
   const Hit *hit = nullptr;
   for (auto it = hits.rbegin(); it != hits.rend(); ++it) {
@@ -2222,6 +2263,7 @@ static int mainHandler(int type, int par1, int par2) {
       if (launcher::registerIcon(FLASHDIR, ScreenWidth())) toast(tr(S_ICON_RESTART), 8000);
       tg.dataDir = gDataDir;
       tg.onFileDone = onFileDone;
+      tg.onIncoming = onIncoming;
       tg.onError = [](const std::string &e) {
         if (scr != Scr::Login) toast(e, 4000);
         else invalidate(true);
