@@ -241,6 +241,7 @@ static void dump() {
 }
 void FullUpdate() { dump(); }
 void PartialUpdate(int, int, int, int) { dump(); }
+void DynamicUpdate(int, int, int, int) { dump(); }
 
 // no-op stubs
 void Message(int, const char *, const char *, int) {}

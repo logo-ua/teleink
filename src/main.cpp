@@ -276,13 +276,46 @@ static void ticks(int x, int y, bool two, int color) {
 }
 
 // Thin scroll indicator on the right edge: start and size are fractions of the whole.
+// Scrollbar geometry from the last draw, used to drag it with a finger.
+struct ScrollState {
+  bool visible = false;
+  int y = 0, h = 0, thumbH = 0;
+  double size = 1;
+  bool candidate = false;  // finger went down on the scrollbar strip
+  bool dragging = false;
+  double frac = 0;  // 0 = top, 1 = bottom
+} sb;
+
+static int sbWidth() { return 3; }
+static int sbX() { return W - sbWidth() - 3; }
+
+static void drawThumb(double frac, int w) {
+  int ty = sb.y + static_cast<int>((sb.h - sb.thumbH) * frac);
+  fillRound(W - w - 3, ty, w, sb.thumbH, std::min(w / 2, 3), DGRAY);
+}
+
 static void scrollbar(int y, int h, double start, double size) {
   if (size >= 1.0 || h <= 0) return;
-  int w = 3, x = W - w - 3;
-  int th = std::max(FS * 3 / 2, static_cast<int>(h * size));
-  int ty = y + static_cast<int>((h - th) * std::min(1.0, std::max(0.0, start / std::max(1e-9, 1.0 - size))));
-  fillRound(x, ty, w, th, 1, DGRAY);
+  sb.visible = true;
+  sb.y = y;
+  sb.h = h;
+  sb.size = size;
+  sb.thumbH = std::max(FS * 3 / 2, static_cast<int>(h * size));
+  double frac = std::min(1.0, std::max(0.0, start / std::max(1e-9, 1.0 - size)));
+  drawThumb(frac, sbWidth());
 }
+
+// While dragging only the strip on the right is redrawn, with the fast e-ink waveform.
+static void dragScrollbar(int y) {
+  double frac = (y - sb.y - sb.thumbH / 2.0) / std::max(1, sb.h - sb.thumbH);
+  sb.frac = std::min(1.0, std::max(0.0, frac));
+  int stripW = FS / 2;
+  FillArea(W - stripW, sb.y, stripW, sb.h, WHITE);
+  drawThumb(sb.frac, FS / 4);
+  DynamicUpdate(W - stripW, sb.y, stripW, sb.h);
+}
+
+static void scrollTo(double frac);
 
 static void button(int x, int y, int w, int h, const std::string &label, bool primary) {
   if (primary) {
@@ -1717,6 +1750,7 @@ static void chatMenu() {
 // ======================================================================
 
 static void drawScreen() {
+  sb.visible = false;
   switch (scr) {
     case Scr::Login: drawLogin(); break;
     case Scr::Chats: drawChats(); break;
@@ -1807,6 +1841,29 @@ static void pollTimer() {
     }
   }
   SetHardTimer("tg_poll", pollTimer, 150);
+}
+
+// Jumps to the position the scrollbar was dragged to.
+static void scrollTo(double frac) {
+  if (scr == Scr::Chats) {
+    auto ids = currentChatIds();
+    int per = rowsPerPage();
+    int pages = std::max(1, static_cast<int>((ids.size() + per - 1) / per));
+    listPage = static_cast<int>(frac * (pages - 1) + 0.5);
+  } else if (scr == Scr::Chat) {
+    auto order = msgOrder();
+    if (order.empty()) return;
+    size_t n = order.size();
+    // frac is where the top of the screen lands; keep about a screen of messages below it
+    size_t top = static_cast<size_t>(frac * (n - 1) + 0.5);
+    size_t shown = 1;
+    if (sb.size > 0 && sb.size < 1) shown = std::max<size_t>(1, static_cast<size_t>(sb.size * n));
+    size_t bottom = std::min(n - 1, top + shown - 1);
+    bottomMsgId = bottom >= n - 1 ? 0 : order[bottom];
+    tallOffset = 0;
+    if (top == 0) tg.loadOlder();
+  }
+  invalidate(true);
 }
 
 static void handleTap(int x, int y) {
@@ -1978,12 +2035,31 @@ static int mainHandler(int type, int par1, int par2) {
       downX = par1;
       downY = par2;
       ignoreUp = false;
+      sb.candidate = sb.visible && (scr == Scr::Chats || scr == Scr::Chat) && par1 >= W - FS * 3 / 2 &&
+                     par2 >= sb.y - FS / 2 && par2 <= sb.y + sb.h + FS / 2;
+      sb.dragging = false;
+      return 1;
+    case EVT_POINTERMOVE:
+    case EVT_POINTERDRAG:
+      if (sb.candidate && (sb.dragging || std::abs(par2 - downY) > FS / 3)) {
+        sb.dragging = true;
+        dragScrollbar(par2);
+      }
       return 1;
     case EVT_POINTERLONG:
+      if (sb.candidate) return 1;  // finger resting on the scrollbar is not a long tap
       ignoreUp = true;
       handleLongTap(par1, par2);
       return 1;
     case EVT_POINTERUP: {
+      if (sb.dragging) {
+        sb.dragging = sb.candidate = false;
+        dragScrollbar(par2);
+        scrollTo(sb.frac);
+        downX = downY = -1;
+        return 1;
+      }
+      sb.candidate = false;
       if (ignoreUp) { ignoreUp = false; return 1; }
       int dx = par1 - downX, dy = par2 - downY;
       if (downX >= 0 && std::abs(dy) > H / 8 && std::abs(dy) > std::abs(dx)) {

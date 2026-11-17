@@ -138,6 +138,23 @@ int main(int argc, char **argv) {
   tg.listComplete["main"] = true;
   scr = Scr::Chats;
   shot("04_chats");
+  // drag the scrollbar from top to bottom: should land on the last page
+  scr = Scr::Chats;
+  listPage = 0;
+  shot("04a_chats_top");
+  mainHandler(EVT_POINTERDOWN, W - 4, sb.y + 5);
+  for (int yy = sb.y + 5; yy <= sb.y + sb.h; yy += 40) mainHandler(EVT_POINTERMOVE, W - 4, yy);
+  mainHandler(EVT_POINTERUP, W - 4, sb.y + sb.h);
+  printf("after drag listPage=%d (expected last page)\n", listPage);
+  needFull = true;
+  drawScreen();
+  listPage = 0;
+  // a plain tap on the right edge must still open the chat under it
+  mainHandler(EVT_POINTERDOWN, W - 4, headerH() + 20);
+  mainHandler(EVT_POINTERUP, W - 4, headerH() + 20);
+  printf("tap on edge opened chat: %d\n", scr == Scr::Chat ? 1 : 0);
+  tg.openChatId = 0;
+  scr = Scr::Chats;
   searchMode = true;
   searchQuery = "клуб";
   searchResults = {101};
