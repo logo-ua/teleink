@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Teleink — Unofficial Telegram for PocketBook</title>
+<meta name="description" content="Teleink is a free, open-source unofficial Telegram client for PocketBook e-readers. Chats, channels and the easiest way to send books to your reader.">
+<meta name="keywords" content="Telegram for PocketBook, Telegram PocketBook, PocketBook app, e-reader Telegram, send books to PocketBook, Teleink">
+<link rel="canonical" href="https://logo-ua.github.io/teleink/">
+<link rel="icon" href="icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Teleink — Unofficial Telegram for PocketBook">
+<meta property="og:description" content="Chats, channels and the easiest way to send books to your PocketBook.">
+<meta property="og:image" content="https://logo-ua.github.io/teleink/promo/teleink-banner.png">
+<meta property="og:url" content="https://logo-ua.github.io/teleink/">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root {
+    --paper: #f0efeb; --card: #fbfaf7; --ink: #161618; --muted: #5d5d62; --line: #d9d7d0;
+    --btn: #161618; --btn-ink: #fbfaf7; --r: 18px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #18181a; --card: #222225; --ink: #ececea; --muted: #a2a2a7; --line: #36363a;
+            --btn: #ececea; --btn-ink: #18181a; }
+    .plane { filter: invert(1); mix-blend-mode: screen; }
+    .hero img.shot { background: #f0efeb; }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font: 18px/1.55 Roboto, "Segoe UI", system-ui, -apple-system, sans-serif; }
+  a { color: inherit; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  header { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--paper) 88%, transparent);
+           backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .bar { display: flex; align-items: center; gap: 24px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; text-decoration: none; }
+  .brand img { width: 30px; height: 30px; mix-blend-mode: multiply; }
+  nav { display: flex; gap: 20px; margin-left: auto; font-size: 16px; }
+  nav a { text-decoration: none; color: var(--muted); }
+  nav a:hover { color: var(--ink); }
+  .lang { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .lang button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600;
+                 padding: 6px 12px; cursor: pointer; }
+  .lang button[aria-pressed="true"] { background: var(--btn); color: var(--btn-ink); }
+  .hero { display: grid; grid-template-columns: 1fr 1.25fr; gap: 40px; align-items: center; padding: 64px 0 40px; }
+  .hero h1 { font-size: clamp(40px, 6vw, 68px); line-height: 1.04; margin: 0 0 18px; letter-spacing: -0.02em; }
+  .hero p { font-size: 20px; color: var(--muted); margin: 0 0 28px; }
+  .hero img.shot { width: 100%; height: auto; border-radius: var(--r); }
+  .btns { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 24px; border-radius: 999px;
+         background: var(--btn); color: var(--btn-ink); font-weight: 700; text-decoration: none; }
+  .btn.ghost { background: none; color: var(--ink); border: 1.5px solid var(--ink); }
+  .note { font-size: 14px; color: var(--muted); margin-top: 14px; }
+  section { padding: 56px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(28px, 3.6vw, 40px); margin: 0 0 28px; letter-spacing: -0.01em; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; counter-reset: s;
+           list-style: none; padding: 0; margin: 0; }
+  .steps li { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; counter-increment: s; }
+  .steps li::before { content: counter(s); display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%;
+                      background: var(--btn); color: var(--btn-ink); font-weight: 700; margin-bottom: 14px; }
+  .steps b { display: block; margin-bottom: 4px; }
+  .steps span, .feat span { color: var(--muted); font-size: 16px; }
+  .feat { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .feat div { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; }
+  .feat b { display: block; margin-bottom: 4px; }
+  .gallery { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .gallery img { width: 100%; height: auto; border-radius: 14px; }
+  code { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 0.9em; }
+  ul.plain { margin: 0; padding-left: 22px; }
+  ul.plain li { margin: 6px 0; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 22px; margin-bottom: 12px; }
+  summary { font-weight: 700; cursor: pointer; }
+  details p { color: var(--muted); margin: 10px 0 0; }
+  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 15px; }
+  footer .row { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 10px; }
+  [data-l]:not(.on) { display: none !important; }
+  @media (max-width: 860px) {
+    nav { display: none; }
+    .lang { margin-left: auto; }
+    .hero { grid-template-columns: 1fr; padding-top: 36px; }
+    .gallery { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="#"><img class="plane" src="icon.png" alt="">Teleink</a>
+    <nav>
+      <a href="#install"><span data-l="en">Install</span><span data-l="uk">Встановлення</span><span data-l="ru">Установка</span></a>
+      <a href="#features"><span data-l="en">Features</span><span data-l="uk">Можливості</span><span data-l="ru">Возможности</span></a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/logo-ua/teleink">GitHub</a>
+    </nav>
+    <div class="lang" role="group" aria-label="Language">
+      <button data-set="en">EN</button><button data-set="uk">UA</button><button data-set="ru">RU</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <div>
+      <h1>
+        <span data-l="en">Telegram on your PocketBook</span>
+        <span data-l="uk">Telegram на вашому PocketBook</span>
+        <span data-l="ru">Telegram на вашем PocketBook</span>
+      </h1>
+      <p data-l="en">Teleink is a free unofficial Telegram client for PocketBook e-readers. Read chats and channels on e-ink — and send books to your reader in seconds.</p>
+      <p data-l="uk">Teleink — безкоштовний неофіційний клієнт Telegram для рідерів PocketBook. Читайте чати й канали на e-ink і закидайте книги на рідер за лічені секунди.</p>
+      <p data-l="ru">Teleink — бесплатный неофициальный клиент Telegram для ридеров PocketBook. Читайте чаты и каналы на e-ink и отправляйте книги на ридер за секунды.</p>
+      <div class="btns">
+        <a class="btn" href="https://github.com/logo-ua/teleink/releases/latest">
+          <span data-l="en">⬇ Download</span><span data-l="uk">⬇ Завантажити</span><span data-l="ru">⬇ Скачать</span>
+        </a>
+        <a class="btn ghost" href="https://github.com/logo-ua/teleink">GitHub</a>
+      </div>
+      <div class="note">
+        <span data-l="en">Free · open source · firmware 6.x</span>
+        <span data-l="uk">Безкоштовно · відкритий код · прошивка 6.x</span>
+        <span data-l="ru">Бесплатно · открытый код · прошивка 6.x</span>
+      </div>
+    </div>
+    <img class="shot" src="promo/teleink-hero.png" width="1370" height="1270"
+         alt="Teleink — Telegram for PocketBook on an e-reader">
+  </div>
+
+  <section>
+    <h2>
+      <span data-l="en">The easiest way to send a book</span>
+      <span data-l="uk">Найпростіший спосіб надіслати книгу</span>
+      <span data-l="ru">Самый простой способ отправить книгу</span>
+    </h2>
+    <ol class="steps">
+      <li>
+        <b data-l="en">Send the file</b><b data-l="uk">Надішліть файл</b><b data-l="ru">Отправьте файл</b>
+        <span data-l="en">From your phone or computer to Saved Messages or any chat.</span>
+        <span data-l="uk">З телефона чи комп'ютера у «Збране» або в будь-який чат.</span>
+        <span data-l="ru">С телефона или компьютера в «Избранное» или любой чат.</span>
+      </li>
+      <li>
+        <b data-l="en">Open Teleink</b><b data-l="uk">Відкрийте Teleink</b><b data-l="ru">Откройте Teleink</b>
+        <span data-l="en">On the reader, in the same chat.</span>
+        <span data-l="uk">На рідері, у тому самому чаті.</span>
+        <span data-l="ru">На ридере, в том же чате.</span>
+      </li>
+      <li>
+        <b data-l="en">Tap and read</b><b data-l="uk">Торкніться й читайте</b><b data-l="ru">Нажмите и читайте</b>
+        <span data-l="en">EPUB, PDF, FB2 and other formats open in the built-in reader.</span>
+        <span data-l="uk">EPUB, PDF, FB2 та інші формати відкриваються у вбудованій читалці.</span>
+        <span data-l="ru">EPUB, PDF, FB2 и другие форматы открываются во встроенной читалке.</span>
+      </li>
+    </ol>
+  </section>
+
+  <section id="features">
+    <h2><span data-l="en">What it can do</span><span data-l="uk">Що вміє</span><span data-l="ru">Что умеет</span></h2>
+    <div class="feat">
+      <div>
+        <b data-l="en">Chats, groups and channels</b><b data-l="uk">Чати, групи й канали</b><b data-l="ru">Чаты, группы и каналы</b>
+        <span data-l="en">Read and reply, avatars, replies, Archive and Saved Messages.</span>
+        <span data-l="uk">Читання й відповіді, аватарки, цитати, «Архів» і «Збране».</span>
+        <span data-l="ru">Чтение и ответы, аватарки, цитаты, «Архив» и «Избранное».</span>
+      </div>
+      <div>
+        <b data-l="en">Files and books</b><b data-l="uk">Файли й книги</b><b data-l="ru">Файлы и книги</b>
+        <span data-l="en">Download to <code>Downloads/Teleink</code> and send files from the reader.</span>
+        <span data-l="uk">Завантаження в <code>Downloads/Teleink</code> і надсилання файлів з рідера.</span>
+        <span data-l="ru">Загрузка в <code>Downloads/Teleink</code> и отправка файлов с ридера.</span>
+      </div>
+      <div>
+        <b data-l="en">Search</b><b data-l="uk">Пошук</b><b data-l="ru">Поиск</b>
+        <span data-l="en">Your chats, public channels and messages inside a chat.</span>
+        <span data-l="uk">По ваших чатах, публічних каналах і повідомленнях у чаті.</span>
+        <span data-l="ru">По вашим чатам, публичным каналам и сообщениям в чате.</span>
+      </div>
+      <div>
+        <b data-l="en">Made for e-ink</b><b data-l="uk">Створено для e-ink</b><b data-l="ru">Создано для e-ink</b>
+        <span data-l="en">High contrast, pages instead of animations, a wide scrollbar for your finger.</span>
+        <span data-l="uk">Висока контрастність, сторінки замість анімацій, широкий скролбар під палець.</span>
+        <span data-l="ru">Высокий контраст, страницы вместо анимаций, широкий скроллбар под палец.</span>
+      </div>
+      <div>
+        <b data-l="en">Three languages</b><b data-l="uk">Три мови</b><b data-l="ru">Три языка</b>
+        <span>English · Українська · Русский</span>
+      </div>
+      <div>
+        <b data-l="en">Lightweight</b><b data-l="uk">Легкий</b><b data-l="ru">Лёгкий</b>
+        <span data-l="en">Only chats and files. Notifications can be turned off, cache cleared in one tap.</span>
+        <span data-l="uk">Тільки чати й файли. Сповіщення можна вимкнути, кеш очистити одним дотиком.</span>
+        <span data-l="ru">Только чаты и файлы. Уведомления можно выключить, кеш очистить одним касанием.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="gallery">
+      <img src="promo/teleink-onboarding.png" alt="Teleink language picker" loading="lazy">
+      <img src="promo/teleink-chats.png" alt="Teleink chat list on PocketBook" loading="lazy">
+      <img src="promo/teleink-group-chat.png" alt="Group chat with a book file" loading="lazy">
+      <img src="promo/teleink-channel.png" alt="Telegram channel on PocketBook" loading="lazy">
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>
+      <span data-l="en">Install in a minute</span>
+      <span data-l="uk">Встановлення за хвилину</span>
+      <span data-l="ru">Установка за минуту</span>
+    </h2>
+    <ol class="steps">
+      <li>
+        <b data-l="en">Download</b><b data-l="uk">Завантажте</b><b data-l="ru">Скачайте</b>
+        <span data-l="en">The zip from <a href="https://github.com/logo-ua/teleink/releases/latest">Releases</a> and unpack it.</span>
+        <span data-l="uk">Архів із <a href="https://github.com/logo-ua/teleink/releases/latest">Releases</a> і розпакуйте його.</span>
+        <span data-l="ru">Архив из <a href="https://github.com/logo-ua/teleink/releases/latest">Releases</a> и распакуйте его.</span>
+      </li>
+      <li>
+        <b data-l="en">Connect the reader</b><b data-l="uk">Підключіть рідер</b><b data-l="ru">Подключите ридер</b>
+        <span data-l="en">With a USB cable and choose “PC link”.</span>
+        <span data-l="uk">USB-кабелем і оберіть «Зв'язок з ПК».</span>
+        <span data-l="ru">USB-кабелем и выберите «Связь с ПК».</span>
+      </li>
+      <li>
+        <b data-l="en">Copy</b><b data-l="uk">Скопіюйте</b><b data-l="ru">Скопируйте</b>
+        <span data-l="en">Everything from the archive to the root of the reader, then eject it.</span>
+        <span data-l="uk">Усе з архіву в корінь рідера, потім безпечно від'єднайте.</span>
+        <span data-l="ru">Всё из архива в корень ридера, затем безопасно отключите.</span>
+      </li>
+      <li>
+        <b data-l="en">Log in</b><b data-l="uk">Увійдіть</b><b data-l="ru">Войдите</b>
+        <span data-l="en">Open Teleink in Applications and enter your phone number.</span>
+        <span data-l="uk">Відкрийте Teleink у «Програмах» і введіть номер телефону.</span>
+        <span data-l="ru">Откройте Teleink в «Приложениях» и введите номер телефона.</span>
+      </li>
+    </ol>
+    <p class="note">
+      <span data-l="en">Works on PocketBook Verse, Verse Pro, Era, InkPad, Touch Lux, Touch HD and other models with firmware 6.x.</span>
+      <span data-l="uk">Працює на PocketBook Verse, Verse Pro, Era, InkPad, Touch Lux, Touch HD та інших моделях із прошивкою 6.x.</span>
+      <span data-l="ru">Работает на PocketBook Verse, Verse Pro, Era, InkPad, Touch Lux, Touch HD и других моделях с прошивкой 6.x.</span>
+    </p>
+  </section>
+
+  <section>
+    <h2><span data-l="en">Privacy</span><span data-l="uk">Приватність</span><span data-l="ru">Приватность</span></h2>
+    <ul class="plain" data-l="en">
+      <li>The reader connects directly to Telegram servers. There are no servers of ours in between.</li>
+      <li>Your session and files stay on the reader. Log out from the menu at any time.</li>
+      <li>No analytics, no ads, no tracking. The code is open on GitHub.</li>
+    </ul>
+    <ul class="plain" data-l="uk">
+      <li>Рідер підключається напряму до серверів Telegram. Жодних наших серверів посередині.</li>
+      <li>Сесія й файли зберігаються лише на рідері. Вийти з акаунта можна в меню будь-коли.</li>
+      <li>Без аналітики, реклами й стеження. Код відкритий на GitHub.</li>
+    </ul>
+    <ul class="plain" data-l="ru">
+      <li>Ридер подключается напрямую к серверам Telegram. Никаких наших серверов посередине.</li>
+      <li>Сессия и файлы хранятся только на ридере. Выйти из аккаунта можно в меню в любой момент.</li>
+      <li>Без аналитики, рекламы и слежки. Код открыт на GitHub.</li>
+    </ul>
+  </section>
+
+  <section id="faq">
+    <h2>FAQ</h2>
+    <details>
+      <summary data-l="en">Is this an official Telegram app?</summary>
+      <summary data-l="uk">Це офіційний застосунок Telegram?</summary>
+      <summary data-l="ru">Это официальное приложение Telegram?</summary>
+      <p data-l="en">No. Teleink is an independent client built on TDLib, Telegram's official library for third-party apps.</p>
+      <p data-l="uk">Ні. Teleink — незалежний клієнт на основі TDLib, офіційної бібліотеки Telegram для сторонніх застосунків.</p>
+      <p data-l="ru">Нет. Teleink — независимый клиент на основе TDLib, официальной библиотеки Telegram для сторонних приложений.</p>
+    </details>
+    <details>
+      <summary data-l="en">Is it free?</summary>
+      <summary data-l="uk">Це безкоштовно?</summary>
+      <summary data-l="ru">Это бесплатно?</summary>
+      <p data-l="en">Yes, completely. The source code is under the MIT license.</p>
+      <p data-l="uk">Так, повністю. Код відкритий під ліцензією MIT.</p>
+      <p data-l="ru">Да, полностью. Код открыт под лицензией MIT.</p>
+    </details>
+    <details>
+      <summary data-l="en">Where are downloaded files?</summary>
+      <summary data-l="uk">Де завантажені файли?</summary>
+      <summary data-l="ru">Где скачанные файлы?</summary>
+      <p data-l="en">In <code>Downloads/Teleink</code> on the reader.</p>
+      <p data-l="uk">У папці <code>Downloads/Teleink</code> на рідері.</p>
+      <p data-l="ru">В папке <code>Downloads/Teleink</code> на ридере.</p>
+    </details>
+    <details>
+      <summary data-l="en">How do I get back to the chat from a PDF?</summary>
+      <summary data-l="uk">Як повернутися з PDF у чат?</summary>
+      <summary data-l="ru">Как вернуться из PDF в чат?</summary>
+      <p data-l="en">Tap the middle of the page to open the reader menu, then choose Back.</p>
+      <p data-l="uk">Торкніться середини сторінки, щоб відкрити меню читалки, і оберіть «Назад».</p>
+      <p data-l="ru">Нажмите на середину страницы, чтобы открыть меню читалки, и выберите «Назад».</p>
+    </details>
+    <details>
+      <summary data-l="en">How do I uninstall it?</summary>
+      <summary data-l="uk">Як видалити?</summary>
+      <summary data-l="ru">Как удалить?</summary>
+      <p data-l="en">Log out in the menu, then delete <code>applications/Teleink.app</code> from the reader.</p>
+      <p data-l="uk">Вийдіть з акаунта в меню, потім видаліть <code>applications/Teleink.app</code> з рідера.</p>
+      <p data-l="ru">Выйдите из аккаунта в меню, затем удалите <code>applications/Teleink.app</code> с ридера.</p>
+    </details>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <span data-l="en">Made by <a href="https://logo.ua">LOGO.UA</a></span>
+      <span data-l="uk">Зроблено в <a href="https://logo.ua">LOGO.UA</a></span>
+      <span data-l="ru">Сделано в <a href="https://logo.ua">LOGO.UA</a></span>
+      <a href="https://github.com/logo-ua/teleink">GitHub</a>
+      <a href="https://github.com/logo-ua/teleink/blob/main/LICENSE">MIT</a>
+      <a href="https://github.com/logo-ua/teleink/issues">
+        <span data-l="en">Report a problem</span><span data-l="uk">Повідомити про проблему</span><span data-l="ru">Сообщить о проблеме</span>
+      </a>
+    </div>
+    <div data-l="en">Teleink is an unofficial client and is not affiliated with Telegram or PocketBook. Telegram and PocketBook are trademarks of their respective owners.</div>
+    <div data-l="uk">Teleink — неофіційний клієнт і не пов'язаний з Telegram чи PocketBook. Telegram і PocketBook — торговельні марки їхніх власників.</div>
+    <div data-l="ru">Teleink — неофициальный клиент и не связан с Telegram или PocketBook. Telegram и PocketBook — товарные знаки их владельцев.</div>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var langs = ['en', 'uk', 'ru'];
+    function pick() {
+      var q = new URLSearchParams(location.search).get('lang');
+      if (langs.indexOf(q) >= 0) return q;
+      try { var s = localStorage.getItem('teleink-lang'); if (langs.indexOf(s) >= 0) return s; } catch (e) {}
+      var n = (navigator.language || 'en').slice(0, 2).toLowerCase();
+      return n === 'uk' ? 'uk' : n === 'ru' ? 'ru' : 'en';
+    }
+    function set(l) {
+      document.documentElement.lang = l;
+      document.querySelectorAll('[data-l]').forEach(function (el) { el.classList.toggle('on', el.getAttribute('data-l') === l); });
+      document.querySelectorAll('[data-set]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-set') === l); });
+      try { localStorage.setItem('teleink-lang', l); } catch (e) {}
+    }
+    document.querySelectorAll('[data-set]').forEach(function (b) {
+      b.addEventListener('click', function () { set(b.getAttribute('data-set')); });
+    });
+    set(pick());
+  })();
+</script>
+</body>
+</html>

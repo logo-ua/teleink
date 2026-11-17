@@ -9,7 +9,7 @@ Unofficial client. Uses the Telegram API via [TDLib](https://github.com/tdlib/td
 
 ![Teleink — Telegram for PocketBook](docs/promo/teleink-banner.png)
 
-**[⬇ Download the latest version](https://github.com/logo-ua/teleink/releases/latest)**
+**[⬇ Download the latest version](https://github.com/logo-ua/teleink/releases/latest)** · [Website](https://logo-ua.github.io/teleink/)
 
 | | | | |
 |---|---|---|---|
