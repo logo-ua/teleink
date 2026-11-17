@@ -28,3 +28,14 @@ g++ -std=c++17 -fno-rtti -w -Ideps/sdk/SDK-B288/usr/arm-obreey-linux-gnueabi/sys
 Runs the TDLib wrapper without UI under `qemu-arm` with the SDK's glibc to check that the ARM build
 starts, creates its database and reaches the phone-number step. Needs the full SDK sysroot (not the
 sparse checkout made by `setup.sh`) and your own keys in the `TG_API_ID` / `TG_API_HASH` environment variables.
+
+## Presentation screenshots (`promo.cpp`)
+
+Same harness with realistic demo chats. Build like `shots.cpp` (replace `test/shots.cpp` with `test/promo.cpp`), then:
+
+```sh
+MOCK_FONT_DIR=<dir with Roboto-Regular.ttf and Roboto-Bold.ttf> ./promo 1072 1448 1   # 0 = UK, 1 = EN, 2 = RU
+```
+
+It expects avatar images as PGM files in `/tmp/promo/` and writes `/tmp/promo/shot_*.pgm`. The framed images in
+`docs/promo/` were made from these.

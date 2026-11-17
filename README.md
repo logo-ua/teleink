@@ -7,6 +7,10 @@ Works on PocketBook Verse, Verse Pro, Era, InkPad, Touch Lux, Touch HD and other
 
 Unofficial client. Uses the Telegram API via [TDLib](https://github.com/tdlib/td). Not affiliated with Telegram.
 
+![Teleink — Telegram for PocketBook](docs/promo/teleink-banner.png)
+
+**[⬇ Download the latest version](https://github.com/logo-ua/teleink/releases/latest)**
+
 | | | | |
 |---|---|---|---|
 | ![](docs/screenshots/language.png) | ![](docs/screenshots/chats.png) | ![](docs/screenshots/chat.png) | ![](docs/screenshots/channel.png) |

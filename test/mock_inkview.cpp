@@ -71,10 +71,13 @@ ifont *OpenFont(const char *name, int size, int aa) {
   f->name = strdup(name);
   f->size = size;
   std::string n = name;
-  const char *path = n.find("Bold") != std::string::npos ? "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-                                                          : "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf";
+  bool bold = n.find("Bold") != std::string::npos;
+  std::string path = bold ? "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+                          : "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf";
+  // MOCK_FONT_DIR=<dir with Roboto-Regular.ttf and Roboto-Bold.ttf> renders with the reader's font
+  if (const char *d = getenv("MOCK_FONT_DIR")) path = std::string(d) + (bold ? "/Roboto-Bold.ttf" : "/Roboto-Regular.ttf");
   FT_Face face;
-  FT_New_Face(ft, path, 0, &face);
+  FT_New_Face(ft, path.c_str(), 0, &face);
   FT_Set_Pixel_Sizes(face, 0, size);
   faces[f] = face;
   f->height = static_cast<int>(face->size->metrics.height >> 6);
